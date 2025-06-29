@@ -2,7 +2,6 @@
 A Total Commander plugin that allows for managing Arma Reforger .PAK archives, viewing files, and extracting them, with automatic EDDS → DDS conversion.
 
 ✨ Features
-
 Display the contents of PAK archives.
 
 Automatic extraction of compressed files (Zlib).
@@ -20,7 +19,7 @@ Simply unzip the ArmaPAK-TC.zip file and press Enter to automatically install th
 Manual Installation
 If the automatic installation doesn’t work, follow these steps:
 
-Extract the ArmaPAK.wcx file into the Total Commander installation directory, under the Plugins\wcx\ subfolder.
+Extract the ArmaPAK.wcx file into the Total Commander installation directory, under the Plugins\wcx subfolder.
 Example: C:\TotalCommander\Plugins\wcx\ArmaPAK.wcx
 
 Launch Total Commander.
@@ -35,14 +34,12 @@ Click New Type, then select the ArmaPAK.wcx file from the Plugins\wcx\ folder.
 
 Click OK.
 
-
 📖 Usage
 Select a .pak file in Total Commander and press Enter to view its contents.
 
-    - You can also open an archive with Ctrl+PageDown.
+You can also open an archive with Ctrl+PageDown.
 
 To extract files, select the desired files or folders from the archive and use the copy (F5) command. To extract the entire archive, press Alt+F9 on the .pak file.
-
 
 📄 License
 This plugin is free software, released "as is." The use of the software is entirely at the user's own risk. The program may be freely copied and distributed, provided the integrity of the distribution is maintained.
