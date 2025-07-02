@@ -1,0 +1,11 @@
+LIBRARY ArmaPAK
+EXPORTS
+    OpenArchive
+    ReadHeader
+    ProcessFile
+    CloseArchive
+    SetChangeVolProc
+    SetProcessDataProc
+    GetPackerCaps
+    ConfigurePacker
+    About
