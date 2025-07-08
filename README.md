@@ -7,6 +7,7 @@ Total Commander plugin that allows for managing Arma Reforger .PAK archives, vie
 - **Display the contents of PAK archives.**
 - **Automatic extraction of compressed files** (Zlib).
 - **EDDS to DDS conversion**: Automatically converts .edds image files to standard .dds format upon extraction.
+-   → While browsing the contents of a `.pak` file, the converted `.dds` images can be opened directly in **Total Commander’s viewer (F3)** using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
 - **EDDS conversion settings**: EDDS conversion settings: EDDS conversion can be enabled or disabled in the pak_plugin.ini file alongside the plugin, and can also be toggled on or off via the configuration dialog of [Plugman](https://totalcmd.net/plugring/tc_plugman.html), the TC Plugins Manager.
 
 ![ArmaPAKcfg25](https://github.com/user-attachments/assets/9a097869-4ba0-4231-add9-ef39f7c3e483)
