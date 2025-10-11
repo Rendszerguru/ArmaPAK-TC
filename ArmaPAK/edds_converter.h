@@ -16,7 +16,3 @@ namespace fs = std::filesystem;
 
 void ConvertToDDS(const std::string& eddsPath, const std::string& ddsPath);
 
-std::optional<std::vector<uint8_t>> ConvertToDDSInMemory(
-	const std::vector<uint8_t>& eddsContent,
-	const std::string& entryName
-);
