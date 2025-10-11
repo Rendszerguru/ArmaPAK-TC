@@ -7,7 +7,7 @@
 
 Total Commander plugin that allows for managing Arma Reforger .PAK archives, reading files, **searching**, and extracting them, with automatic EDDS → DDS conversion.
 
-<img width="1024" height="1024" alt="ArmaPAK" src="https://github.com/user-attachments/assets/56e29bab-b02d-4e66-9e67-2e0e9f802648" />
+<img width="512" height="512" alt="ArmaPAK_" src="https://github.com/user-attachments/assets/9f6c5e7a-5c4d-42ed-84d0-38aee0a3d048" />
 
 ### ✨ **Features**
 - **Display the contents of PAK archives.**
