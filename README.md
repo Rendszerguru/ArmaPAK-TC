@@ -1,7 +1,7 @@
 # 📦 Arma PAK Plugin for Total Commander
 
 [![Version](https://img.shields.io/badge/version-1.0-blue.svg)](https://github.com/Rendszerguru/ArmaPAK-TC/releases/tag/ArmaPAK-TC)
-[![Total Commander](https://img.shields.io/badge/Total%20Commander-Plugin-orange.svg)](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html)
+[![ TC IrfanView](https://img.shields.io/badge/Total%20Commander-Plugin-orange.svg)](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html)
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
 
