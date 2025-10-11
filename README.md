@@ -1,17 +1,23 @@
 # 📦 Arma PAK Plugin for Total Commander
-Total Commander plugin that allows for managing Arma Reforger .PAK archives, viewing files, and extracting them, with automatic EDDS → DDS conversion.
+Total Commander plugin that allows for managing Arma Reforger .PAK archives, viewing files, **searching**, and extracting them, with automatic EDDS → DDS conversion.
 
 ![ArmaPAK_](https://github.com/user-attachments/assets/1355f9a1-9078-42a8-bb14-0abd2fa44812)
 
 ### ✨ **Features**
 - **Display the contents of PAK archives.**
+- **Full-text search support inside PAK files:**  
+  Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search within archive contents.
+- **Memory-based extraction (PackToMem):**  
+  Files can be extracted directly to memory without writing temporary files, improving performance for **Lister previews** and search.
 - **Automatic extraction of compressed files** (Zlib).
-- **EDDS to DDS conversion**: Automatically converts .edds image files to standard .dds format upon extraction.
--   → While browsing the contents of a `.pak` file, the converted `.dds` images can be opened directly in **Total Commander’s viewer (F3)** using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
-- **EDDS conversion settings**: EDDS conversion settings: EDDS conversion can be enabled or disabled in the pak_plugin.ini file alongside the plugin, and can also be toggled on or off via the configuration dialog of [Plugman](https://totalcmd.net/plugring/tc_plugman.html), the TC Plugins Manager.
+- **EDDS to DDS conversion:** Automatically converts `.edds` image files to standard `.dds` format upon extraction.  
+  → While browsing the contents of a `.pak` file, the converted `.dds` images can be opened directly in **Total Commander’s viewer (F3)** using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
+- **EDDS conversion settings:** EDDS conversion can be enabled or disabled in the `pak_plugin.ini` file alongside the plugin, and can also be toggled on or off via the configuration dialog of [Plugman](https://totalcmd.net/plugring/tc_plugman.html), the **Total Commander Plugins Manager**.
 
 ![ArmaPAKcfg25](https://github.com/user-attachments/assets/9a097869-4ba0-4231-add9-ef39f7c3e483)
-- **Targeted error logging**: A `pak_plugin.log` file is created next to the plugin, recording only critical errors and session startup/shutdown information, providing cleaner feedback on the operation.
+
+- **Targeted error logging:** A `pak_plugin.log` file is created next to the plugin, recording only critical errors and session startup/shutdown information.  
+  Optional **detailed logging** can be enabled via `g_EnableLogInfo` for more verbose information.
 
 ---
 
@@ -43,19 +49,21 @@ If the automatic installation doesn’t work, follow these steps:
 ### 📖 **Usage**
 - **Select a .pak file** in Total Commander and press **Enter** to view its contents.  
   - You can also open an archive with **Ctrl+PageDown**.
-
-- To extract files, select the desired files or folders from the archive and use the **copy (F5)** command. To extract the entire archive, press **Alt+F9** on the .pak file.
+- To extract files, select the desired files or folders from the archive and use the **copy (F5)** command.  
+- To extract the entire archive, press **Alt + F9** on the `.pak` file.
+- To **search inside an archive**, press **Alt + F7**, enable **Find text**, and search directly within `.pak` contents.
+- **Memory extraction previews:** Converted `.dds` images can be opened immediately in **Lister** or via [IrfanView](https://www.irfanview.com) with [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html).
 
 ---
 
 ### 📄 **License**
-This plugin is **free software**, released **"as is."** The use of the software is entirely at the user's own risk. The program may be freely copied and distributed, provided the integrity of the distribution is maintained.
+This plugin is **free software**, released **"as is."**  
+Use is at your own risk. Redistribution is permitted as long as the distribution remains intact.
 
 ---
 
 ### 🧑‍💻 **Developer**
-**Icebird**
-
-Copyright © 2025 Icebird. All rights reserved.
+**Icebird**  
+Copyright © 2025 Icebird. All rights reserved.  
 
 If you encounter any issues with the plugin, please report them to the developer!
