@@ -43,6 +43,7 @@ static int currentIndex = 0;
 
 static bool g_EnableEddsConversion = true;
 static bool g_EnableLogInfo = false;
+static std::wstring SearchTextW;
 
 const char* const INI_FILE_NAME = "pak_plugin.ini";
 const char* const INI_SECTION_NAME = "Settings";
@@ -52,7 +53,6 @@ const char* const LOG_FILE_NAME = "pak_plugin.log";
 
 static HMODULE g_hModule = NULL;
 
-char* SearchText = nullptr;
 
 static std::string GetPluginPath() {
 	char path[MAX_PATH];
@@ -138,6 +138,23 @@ static unsigned int SystemTimeToDosDateTime(const SYSTEMTIME& st) {
 	return dosTime;
 }
 
+static std::string WStringToUTF8(const std::wstring& ws) {
+	if (ws.empty()) return {};
+	int size_needed = WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), (int)ws.size(), nullptr, 0, nullptr, nullptr);
+	std::string result(size_needed, 0);
+	WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), (int)ws.size(), &result[0], size_needed, nullptr, nullptr);
+	return result;
+}
+
+static std::string WCharToUTF8(const WCHAR* ws) {
+	if (!ws) return {};
+	int size_needed = WideCharToMultiByte(CP_UTF8, 0, ws, -1, nullptr, 0, nullptr, nullptr);
+	if (size_needed == 0) return {};
+	std::string result(size_needed - 1, 0);
+	WideCharToMultiByte(CP_UTF8, 0, ws, -1, &result[0], size_needed, nullptr, nullptr);
+	return result;
+}
+
 class PakEntry {
 public:
 	enum class CompressionType : uint32_t {
@@ -161,6 +178,7 @@ private:
 	std::vector<std::shared_ptr<PakEntry>> flatEntries;
 	std::string filename;
 	bool initialized = false;
+	long long actualFileSize = 0;
 
 	uint32_t ReadU32BE() {
 		uint32_t value = 0;
@@ -193,22 +211,6 @@ private:
 			throw std::runtime_error("Failed to read string of length " + std::to_string(length));
 		}
 		return str;
-	}
-
-	bool ProcessFormChunk() {
-		char form[4] = { 0 };
-		if (!file.read(form, 4) || strncmp(form, "FORM", 4) != 0) {
-			LogError("PAK file does not start with 'FORM' signature or read failed.");
-			return false;
-		}
-
-		uint32_t formSize = ReadU32BE();
-		char formType[4] = { 0 };
-		if (!file.read(formType, 4) || strncmp(formType, "PAC1", 4) != 0) {
-			LogError("PAK file FORM chunk type is not 'PAC1'.");
-			return false;
-		}
-		return true;
 	}
 
 	bool ProcessHeadChunk(uint32_t length) {
@@ -345,10 +347,34 @@ public:
 				throw std::runtime_error("Failed to open PAK file");
 			}
 
-			initialized = ProcessFormChunk();
-			if (!initialized) {
-				return;
+			file.seekg(0, std::ios::end);
+			actualFileSize = file.tellg();
+			file.seekg(0, std::ios::beg);
+
+			char form[4] = { 0 };
+			if (!file.read(form, 4) || strncmp(form, "FORM", 4) != 0) {
+				LogError("PAK file does not start with 'FORM' signature.");
+				throw std::runtime_error("Invalid PAK signature.");
 			}
+
+			uint32_t formSize = ReadU32BE();
+
+			uint64_t expectedTotalSize = 8 + formSize;
+
+			if (actualFileSize != static_cast<long long>(expectedTotalSize)) {
+				LogError("Archive header size mismatch. Expected: " + std::to_string(expectedTotalSize) +
+					", Actual: " + std::to_string(actualFileSize));
+
+				throw std::runtime_error("Archive size mismatch (corrupt or truncated).");
+			}
+
+			char formType[4] = { 0 };
+			if (!file.read(formType, 4) || strncmp(formType, "PAC1", 4) != 0) {
+				LogError("PAK file FORM chunk type is not 'PAC1'.");
+				throw std::runtime_error("Invalid PAK type.");
+			}
+
+			initialized = true;
 
 			root = std::make_shared<PakEntry>();
 			root->name = "";
@@ -633,14 +659,6 @@ int __stdcall ReadHeaderExW(HANDLE hArcData, tHeaderDataExW* HeaderDataExW) {
 	return 0;
 }
 
-static std::string WStringToUTF8(const std::wstring& ws) {
-	if (ws.empty()) return {};
-	int size_needed = WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), (int)ws.size(), nullptr, 0, nullptr, nullptr);
-	std::string result(size_needed, 0);
-	WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), (int)ws.size(), &result[0], size_needed, nullptr, nullptr);
-	return result;
-}
-
 int __stdcall ProcessFile(HANDLE hArcData, int Operation, char* DestPath, char* DestName)
 {
 	wchar_t wideDestPath[MAX_PATH] = { 0 };
@@ -777,6 +795,30 @@ void __stdcall SetProcessDataProc(HANDLE hArcData, tProcessDataProc pProcessData
 	processDataProc = pProcessDataProc;
 }
 
+extern "C" __declspec(dllexport) void __stdcall SetSearchText(const char* SearchString) {
+	if (SearchString) {
+		int len = MultiByteToWideChar(CP_ACP, 0, SearchString, -1, nullptr, 0);
+		if (len > 0) {
+			SearchTextW.resize(len - 1);
+			MultiByteToWideChar(CP_ACP, 0, SearchString, -1, SearchTextW.data(), len);
+		}
+		LogInfo("[SetSearchText] Search pattern set (A): " + WStringToUTF8(SearchTextW));
+	} else {
+		SearchTextW.clear();
+		LogInfo("[SetSearchText] Search pattern cleared (A).");
+	}
+}
+
+extern "C" __declspec(dllexport) void __stdcall SetSearchTextW(const WCHAR* SearchString) {
+	if (SearchString) {
+		SearchTextW = SearchString;
+		LogInfo("[SetSearchTextW] Search pattern set (W): " + WStringToUTF8(SearchTextW));
+	} else {
+		SearchTextW.clear();
+		LogInfo("[SetSearchTextW] Search pattern cleared (W).");
+	}
+}
+
 extern "C" __declspec(dllexport) int DCPCALL PackFiles(
 	char* PackedFile,
 	char* Files,
@@ -901,6 +943,112 @@ extern "C" __declspec(dllexport) int DCPCALL PackToMem(
 	}
 	catch (...) {
 		LogError("[PackToMem] Unknown EXCEPTION caught.");
+		if (ProcessDataProc) {
+			ProcessDataProc(NULL, 0);
+		}
+		return E_EREAD;
+	}
+}
+
+extern "C" __declspec(dllexport) int DCPCALL PackToMemW(
+	WCHAR* PackedFile,
+	WCHAR* Files,
+	int Flags,
+	tProcessDataProc ProcessDataProc,
+	void* MemOpenData
+) {
+	try {
+		if (!currentArchive) {
+			LogError("[PackToMemW] Archive not open.");
+			return E_BAD_ARCHIVE;
+		}
+
+		std::string filenameToFind = WCharToUTF8(Files);
+		std::replace(filenameToFind.begin(), filenameToFind.end(), '/', '\\');
+
+		const PakEntry* entry = nullptr;
+
+		for (int i = 0; i < currentArchive->GetEntryCount(); ++i) {
+			const PakEntry* currentEntry = currentArchive->GetEntry(i);
+			if (currentEntry && currentEntry->name == filenameToFind) {
+				entry = currentEntry;
+				break;
+			}
+		}
+
+		if (!entry) {
+			LogError("[PackToMemW] File not found in archive: " + filenameToFind);
+			return E_NO_FILES;
+		}
+
+		if (entry->isDirectory) {
+			LogInfo("[PackToMemW] Skipping directory entry: " + entry->name);
+			return 0;
+		}
+
+		LogInfo("[PackToMemW] Starting memory extraction for: " + entry->name +
+			", originalSize=" + std::to_string(entry->originalSize));
+
+		std::vector<uint8_t> processedContent = currentArchive->DecompressEntryData(entry);
+
+		if (g_EnableEddsConversion) {
+			fs::path entryPath(entry->name);
+			std::string ext = entryPath.extension().string();
+			std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+			if (ext == ".edds") {
+				LogInfo("[PackToMemW] EDDS conversion to DDS requested for memory extraction (in-memory).");
+
+				auto ddsContent = ConvertToDDSInMemory(processedContent, entry->name);
+
+				if (ddsContent.has_value()) {
+					processedContent = std::move(ddsContent.value());
+					LogInfo("[PackToMemW] EDDS converted to DDS successfully in memory. New size: " + std::to_string(processedContent.size()));
+				}
+				else {
+					LogError("[PackToMemW] EDDS conversion failed for " + entry->name + ". Streaming original (unconverted) content.");
+				}
+			}
+		}
+
+		const size_t CHUNK_SIZE = 16384;
+		size_t pos = 0;
+		int result = 1;
+
+		while (pos < processedContent.size()) {
+			size_t chunkSize = std::min(CHUNK_SIZE, processedContent.size() - pos);
+
+			result = ProcessDataProc(
+				reinterpret_cast<char*>(processedContent.data() + pos),
+				(int)chunkSize);
+
+			if (result == 0) {
+				LogError("[PackToMemW] Streaming aborted by user.");
+				return E_EABORTED;
+			}
+
+			pos += chunkSize;
+		}
+
+		result = ProcessDataProc(NULL, 0);
+
+		if (result == 0) {
+			LogError("[PackToMemW] Final streaming aborted by user.");
+			return E_EABORTED;
+		}
+
+		LogInfo("[PackToMemW] Memory extraction finished successfully.");
+		return 0;
+	}
+	catch (const std::exception& ex) {
+		LogError("[PackToMemW] EXCEPTION: " + std::string(ex.what()));
+		if (ProcessDataProc) {
+			ProcessDataProc(NULL, 0);
+		}
+		return E_EREAD;
+	}
+	catch (...) {
+		LogError("[PackToMemW] Unknown EXCEPTION caught.");
 		if (ProcessDataProc) {
 			ProcessDataProc(NULL, 0);
 		}
