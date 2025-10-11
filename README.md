@@ -23,7 +23,7 @@ Total Commander plugin that allows for managing Arma Reforger .PAK archives, vie
 ![ArmaPAKcfg25](https://github.com/user-attachments/assets/9a097869-4ba0-4231-add9-ef39f7c3e483)
 
 - **Targeted error logging:** A `pak_plugin.log` file is created next to the plugin, recording only critical errors and session startup/shutdown information.
-  Optional **detailed logging** can be enabled via `g_EnableLogInfo` for more verbose information.
+  Optional **detailed logging** can be enabled via `EnableLogInfo` for more verbose information.
 
 ---
 
