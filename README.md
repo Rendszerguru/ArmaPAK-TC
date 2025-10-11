@@ -5,7 +5,7 @@
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
 
-Total Commander plugin that allows for managing Arma Reforger .PAK archives, viewing files, **searching**, and extracting them, with automatic EDDS → DDS conversion.
+Total Commander plugin that allows for managing Arma Reforger .PAK archives, reading files, **searching**, and extracting them, with automatic EDDS → DDS conversion.
 
 ![ArmaPAK_](https://github.com/user-attachments/assets/1355f9a1-9078-42a8-bb14-0abd2fa44812)
 
