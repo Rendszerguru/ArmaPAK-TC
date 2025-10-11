@@ -4,10 +4,20 @@
 #ifdef __cplusplus
 extern "C" {
 #endif 
-/* Contents of file wcxhead.h */
-/* It contains definitions of error codes, flags and callbacks */
 
-/* Error codes returned to calling application */
+/* DCPCALL definition */
+#ifdef _WIN32
+  #define DCPCALL __stdcall
+#else
+  #define DCPCALL
+#endif
+
+#include <windows.h>   // HANDLE, CreateDirectory, stb.
+#include <wchar.h>     // WCHAR
+#include <tchar.h>     // TCHAR
+#include <stdint.h>    // int32_t, stb.
+#include <stdio.h>
+
 #define E_END_ARCHIVE     10            /* No more files in archive */
 #define E_NO_MEMORY       11            /* Not enough memory */
 #define E_BAD_DATA        12            /* Data is bad */
@@ -23,6 +33,12 @@ extern "C" {
 #define E_NO_FILES        22            /* No files found */
 #define E_TOO_MANY_FILES  23            /* Too many files to pack */
 #define E_NOT_SUPPORTED   24            /* Function not supported */
+
+#define E_SUCCESS           0
+
+#define E_NO_MORE_FILES     0      /* No match found */
+#define E_FILESEARCHOK      1      /* Match found */
+
 
 /* flags for unpacking */
 #define PK_OM_LIST          0
@@ -52,9 +68,8 @@ extern "C" {
 #define PK_CAPS_MEMPACK    32    /* Supports packing in memory           */
 #define PK_CAPS_BY_CONTENT 64    /* Detect archive type by content       */
 #define PK_CAPS_SEARCHTEXT 128   /* Allow searching for text in archives */
-                                 /* created with this plugin}            */
+
 #define PK_CAPS_HIDE       256   /* Show as normal files (hide packer    */
-                                 /* icon), open with Ctrl+PgDn, not Enter*/
 
 /* Flags for packing in memory */
 #define MEM_OPTIONS_WANTHEADERS 1  /* Return archive headers with packed data */
@@ -65,32 +80,84 @@ extern "C" {
 
 
 typedef struct {
-    char ArcName[260];
-    char FileName[260];
-    int Flags;
-    int PackSize;
-    int UnpSize;
-    int HostOS;
-    int FileCRC;
-    int FileTime;
-    int UnpVer;
-    int Method;
-    int FileAttr;
-    char* CmtBuf;
-    int CmtBufSize;
-    int CmtSize;
-    int CmtState;
+	char ArcName[260];
+	char FileName[260];
+	int Flags;
+	int PackSize;
+	int UnpSize;
+	int HostOS;
+	int FileCRC;
+	int FileTime;
+	int UnpVer;
+	int Method;
+	int FileAttr;
+	char* CmtBuf;
+	int CmtBufSize;
+	int CmtSize;
+	int CmtState;
   } tHeaderData;
 
 typedef struct {
-    char* ArcName;
-    int OpenMode;
-    int OpenResult;
-    char* CmtBuf;
-    int CmtBufSize;
-    int CmtSize;
-    int CmtState;
+	char ArcName[1024];
+	char FileName[1024];
+	int Flags;
+	unsigned int PackSize;
+	unsigned int PackSizeHigh;
+	unsigned int UnpSize;
+	unsigned int UnpSizeHigh;
+	int HostOS;
+	int FileCRC;
+	int FileTime;
+	int UnpVer;
+	int Method;
+	int FileAttr;
+	char* CmtBuf;
+	int CmtBufSize;
+	int CmtSize;
+	int CmtState;
+	char Reserved[1024];
+  } tHeaderDataEx;
+
+typedef struct {
+	WCHAR ArcName[1024];
+	WCHAR FileName[1024];
+	int Flags;
+	unsigned int PackSize;
+	unsigned int PackSizeHigh;
+	unsigned int UnpSize;
+	unsigned int UnpSizeHigh;
+	int HostOS;
+	int FileCRC;
+	int FileTime;
+	int UnpVer;
+	int Method;
+	int FileAttr;
+	char* CmtBuf;
+	int CmtBufSize;
+	int CmtSize;
+	int CmtState;
+	char Reserved[1024];
+  } tHeaderDataExW;
+
+typedef struct {
+	char* ArcName;
+	int OpenMode;
+	int OpenResult;
+	char* CmtBuf;
+	int CmtBufSize;
+	int CmtSize;
+	int CmtState;
   } tOpenArchiveData;
+
+typedef struct {
+	WCHAR* ArcName;
+	int OpenMode;
+	int OpenResult;
+	WCHAR* CmtBuf;
+	int CmtBufSize;
+	int CmtSize;
+	int CmtState;
+  } tOpenArchiveDataW;
 
 typedef struct {
 	int size;
@@ -105,10 +172,15 @@ typedef int (__stdcall *tChangeVolProc)(char *ArcName,int Mode);
 /* Notify that data is processed - used for progress dialog */
 typedef int (__stdcall *tProcessDataProc)(char *FileName,int Size);
 
-HANDLE __stdcall OpenArchive (tOpenArchiveData *ArchiveData);
-int __stdcall ReadHeader (HANDLE hArcData, tHeaderData *HeaderData);
-int __stdcall CloseArchive (HANDLE hArcData);
-int __stdcall ProcessFile (HANDLE hArcData, int Operation, char *DestPath, char *DestName);
+HANDLE DCPCALL OpenArchive(tOpenArchiveData *ArchiveData);
+HANDLE DCPCALL OpenArchiveW(tOpenArchiveDataW *ArchiveDataW);
+int DCPCALL ReadHeader(HANDLE hArcData, tHeaderData *HeaderData);
+int DCPCALL ReadHeaderEx(HANDLE hArcData, tHeaderDataEx *HeaderDataEx);
+int DCPCALL ReadHeaderExW(HANDLE hArcData, tHeaderDataExW *HeaderDataEx);
+int DCPCALL ProcessFile(HANDLE hArcData, int Operation, char *DestPath, char *DestName);
+int DCPCALL ProcessFileW(HANDLE hArcData, int Operation, const wchar_t *DestPath, const wchar_t *DestName);
+int DCPCALL CloseArchive(HANDLE hArcData);
+
 void __stdcall SetChangeVolProc (HANDLE hArcData, tChangeVolProc pChangeVolProc1);
 void __stdcall SetProcessDataProc (HANDLE hArcData, tProcessDataProc pProcessDataProc);
 
