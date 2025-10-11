@@ -5,7 +5,7 @@
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
 
-Total Commander plugin that allows for managing Arma Reforger .PAK archives, reading files, **searching**, and extracting them, with automatic EDDS → DDS conversion.
+Total Commander plugin that allows for managing Arma Reforger .PAK archives, reading files, **searching**, and extracting them.
 
 <img width="512" height="512" alt="ArmaPAK_" src="https://github.com/user-attachments/assets/9f6c5e7a-5c4d-42ed-84d0-38aee0a3d048" />
 
@@ -13,8 +13,6 @@ Total Commander plugin that allows for managing Arma Reforger .PAK archives, rea
 - **Display the contents of PAK archives.**
 - **Full-text search support inside PAK files:**
   Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search within archive contents.
-- **Memory-based extraction (PackToMem):**
-  Files can be extracted directly to memory without writing temporary files, improving performance for **Lister previews** and search.
 - **Automatic extraction of compressed files** (Zlib).
 - **EDDS to DDS conversion:** Automatically converts `.edds` image files to standard `.dds` format upon extraction.
   → While browsing the contents of a `.pak` file, the converted `.dds` images can be opened directly in **Total Commander’s viewer (F3)** using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
@@ -58,7 +56,6 @@ If the automatic installation doesn’t work, follow these steps:
 - To extract files, select the desired files or folders from the archive and use the **copy (F5)** command.
 - To extract the entire archive, press **Alt + F9** on the `.pak` file.
 - To **search inside an archive**, press **Alt + F7**, enable **Find text**, and search directly within `.pak` contents.
-- **Memory extraction previews:** Converted `.dds` images can be opened immediately in **Lister** or via [IrfanView](https://www.irfanview.com) with [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html).
 
 ---
 
