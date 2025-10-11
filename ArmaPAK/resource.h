@@ -8,6 +8,7 @@
 #define IDC_ENABLE_EDDS_CONVERSION      1001
 #define IDC_LOGO                        1002
 #define IDC_ABOUT_BUTTON 				1003
+#define IDC_ENABLE_LOG_INFO 			   1004
 
 #define IDC_ABOUT_LOGO                  1100
 #define IDC_ABOUT_VERSION_TEXT          1101
