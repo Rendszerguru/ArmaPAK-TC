@@ -1,6 +1,6 @@
 # 📦 Arma PAK Plugin for Total Commander
 
-[![Version](https://img.shields.io/badge/version-1.3-blue.svg)](https://github.com/icebird-dev/ArmaPAK-TC)
+[![Version](https://img.shields.io/badge/version-1.0-blue.svg)](https://github.com/Rendszerguru/ArmaPAK-TC/releases/tag/ArmaPAK-TC)
 [![Total Commander](https://img.shields.io/badge/Total%20Commander-Plugin-orange.svg)](https://www.ghisler.com/plugins.htm)
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
