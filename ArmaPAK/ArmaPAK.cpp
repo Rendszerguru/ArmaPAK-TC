@@ -33,13 +33,10 @@ class PakEntry;
 
 void LogError(const std::string& message);
 static void LogInfo(const std::string& message);
-static void LogHexDump(const std::vector<uint8_t>& data, const std::string& prefix = "");
 
 static std::ofstream debugLog;
 static bool logInitialized = false;
 static tProcessDataProc processDataProc = nullptr;
-static std::unique_ptr<PakArchive> currentArchive;
-static int currentIndex = 0;
 
 static bool g_EnableEddsConversion = true;
 static bool g_EnableLogInfo = false;
@@ -52,7 +49,6 @@ const char* const INI_KEY_LOG_INFO = "EnableLogInfo";
 const char* const LOG_FILE_NAME = "pak_plugin.log";
 
 static HMODULE g_hModule = NULL;
-
 
 static std::string GetPluginPath() {
 	char path[MAX_PATH];
@@ -100,17 +96,6 @@ static void LogInfo(const std::string& message) {
 		debugLog << "[INFO] " << message << "\n";
 		debugLog.flush();
 	}
-}
-
-static void LogHexDump(const std::vector<uint8_t>& data, const std::string& prefix) {
-	if (!logInitialized || data.empty() || !g_EnableLogInfo) return;
-
-	std::stringstream ss;
-	ss << prefix << "First " << std::min((size_t)32, data.size()) << " bytes HEX: ";
-	for (size_t i = 0; i < 32 && i < data.size(); ++i) {
-		ss << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (int)data[i] << " ";
-	}
-	LogInfo(ss.str());
 }
 
 static void LoadSettings() {
@@ -179,6 +164,8 @@ private:
 	std::string filename;
 	bool initialized = false;
 	long long actualFileSize = 0;
+
+	int currentIndex = 0;
 
 	uint32_t ReadU32BE() {
 		uint32_t value = 0;
@@ -298,25 +285,25 @@ public:
 			throw std::runtime_error("Invalid or directory entry for decompression.");
 		}
 
-		std::ifstream input(filename, std::ios::binary);
-		if (!input.is_open()) {
-			throw std::runtime_error("Cannot reopen archive: " + filename);
+		if (!file.is_open()) {
+			throw std::runtime_error("Archive file stream is not open.");
 		}
 
-		input.seekg(0, std::ios::end);
-		size_t fileSize = static_cast<size_t>(input.tellg());
-		if (entry->offset + entry->size > fileSize) {
+		file.seekg(static_cast<std::streamoff>(entry->offset), std::ios::beg);
+		if (file.fail()) {
+			throw std::runtime_error("Failed to seek to entry data offset.");
+		}
+
+		if (entry->offset + entry->size > actualFileSize) {
 			LogError("[DecompressEntryData] Entry data goes beyond archive bounds: " + entry->name);
 			throw std::runtime_error("Entry data out of bounds.");
 		}
 
-		input.seekg(static_cast<std::streamoff>(entry->offset), std::ios::beg);
-
 		std::vector<uint8_t> rawFileContent(entry->size);
-		input.read(reinterpret_cast<char*>(rawFileContent.data()), entry->size);
-		if (input.gcount() != static_cast<std::streamsize>(entry->size)) {
-			LogError("[DecompressEntryData] Incomplete read from PAK.");
-			throw std::runtime_error("Incomplete read from PAK.");
+		file.read(reinterpret_cast<char*>(rawFileContent.data()), entry->size);
+		if (file.gcount() != static_cast<std::streamsize>(entry->size) || file.fail()) {
+			LogError("[DecompressEntryData] Incomplete read from PAK or stream error.");
+			throw std::runtime_error("Incomplete read from PAK or stream error.");
 		}
 
 		if (entry->compression == PakEntry::CompressionType::Zlib) {
@@ -424,6 +411,12 @@ public:
 
 	std::string GetFilename() const { return filename; }
 
+	int GetCurrentIndex() const { return currentIndex; }
+	void IncrementIndex() { currentIndex++; }
+	void DecrementIndex() { currentIndex--; }
+	void ResetIndex() { currentIndex = 0; }
+
+
 	bool ExtractFile(int index, const std::string& destPath) {
 		const PakEntry* entry = GetEntry(index);
 
@@ -501,7 +494,13 @@ public:
 	}
 };
 
+static PakArchive* GetArchive(HANDLE hArcData) {
+	return reinterpret_cast<PakArchive*>(hArcData);
+}
+
+
 HANDLE __stdcall OpenArchive(tOpenArchiveData* ArchiveData) {
+	PakArchive* newArchive = nullptr;
 	try {
 		if (!ArchiveData || !ArchiveData->ArcName) {
 			LogError("[OpenArchive] Invalid archive data or missing filename.");
@@ -510,35 +509,36 @@ HANDLE __stdcall OpenArchive(tOpenArchiveData* ArchiveData) {
 		}
 
 		LogInfo("[OpenArchive] Opening archive: " + std::string(ArchiveData->ArcName));
-		currentArchive = std::make_unique<PakArchive>(ArchiveData->ArcName);
 
-		if (!currentArchive || !currentArchive->IsInitialized()) {
-			currentArchive.reset();
+		newArchive = new PakArchive(ArchiveData->ArcName);
+
+		if (!newArchive || !newArchive->IsInitialized()) {
+			delete newArchive;
 			ArchiveData->OpenResult = E_EOPEN;
 			return nullptr;
 		}
 
-		currentIndex = 0;
 		ArchiveData->OpenResult = 0;
+		newArchive->ResetIndex();
 		LogInfo("Successfully opened archive: " + std::string(ArchiveData->ArcName));
-
-		return reinterpret_cast<HANDLE>(1);
+		return reinterpret_cast<HANDLE>(newArchive);
 	}
 	catch (const std::exception& ex) {
 		LogError(std::string("OpenArchive EXCEPTION: ") + ex.what());
-		currentArchive.reset();
+		delete newArchive;
 		ArchiveData->OpenResult = E_EOPEN;
 		return nullptr;
 	}
 	catch (...) {
 		LogError("OpenArchive Unknown EXCEPTION caught.");
-		currentArchive.reset();
+		delete newArchive;
 		ArchiveData->OpenResult = E_EOPEN;
 		return nullptr;
 	}
 }
 
 HANDLE __stdcall OpenArchiveW(tOpenArchiveDataW* ArchiveDataW) {
+	PakArchive* newArchive = nullptr;
 	if (!ArchiveDataW || !ArchiveDataW->ArcName) {
 		LogError("[OpenArchiveW] Invalid archive data or missing filename.");
 		ArchiveDataW->OpenResult = E_BAD_ARCHIVE;
@@ -557,40 +557,43 @@ HANDLE __stdcall OpenArchiveW(tOpenArchiveDataW* ArchiveDataW) {
 
 	try {
 		LogInfo("[OpenArchiveW] Opening archive: " + arcName);
-		currentArchive = std::make_unique<PakArchive>(arcName);
 
-		if (!currentArchive || !currentArchive->IsInitialized()) {
-			currentArchive.reset();
+		newArchive = new PakArchive(arcName);
+
+		if (!newArchive || !newArchive->IsInitialized()) {
+			delete newArchive;
 			ArchiveDataW->OpenResult = E_EOPEN;
 			return nullptr;
 		}
 
-		currentIndex = 0;
 		ArchiveDataW->OpenResult = 0;
+		newArchive->ResetIndex();
 		LogInfo("Successfully opened archive: " + arcName);
-
-		return reinterpret_cast<HANDLE>(1);
+		return reinterpret_cast<HANDLE>(newArchive);
 	}
 	catch (const std::exception& ex) {
 		LogError(std::string("OpenArchiveW EXCEPTION: ") + ex.what());
-		currentArchive.reset();
+		delete newArchive;
 		ArchiveDataW->OpenResult = E_EOPEN;
 		return nullptr;
 	}
 	catch (...) {
 		LogError("OpenArchiveW Unknown EXCEPTION caught.");
-		currentArchive.reset();
+		delete newArchive;
 		ArchiveDataW->OpenResult = E_EOPEN;
 		return nullptr;
 	}
 }
 
 int __stdcall ReadHeader(HANDLE hArcData, tHeaderData* HeaderData) {
-	if (!currentArchive || hArcData != reinterpret_cast<HANDLE>(1)) {
-		LogError("Invalid archive handle or archive not open in ReadHeader.");
+	PakArchive* currentArchive = GetArchive(hArcData);
+
+	if (!currentArchive) {
+		LogError("Invalid archive handle in ReadHeader.");
 		return E_BAD_ARCHIVE;
 	}
 
+	int currentIndex = currentArchive->GetCurrentIndex();
 	if (currentIndex >= currentArchive->GetEntryCount()) {
 		return E_END_ARCHIVE;
 	}
@@ -620,7 +623,7 @@ int __stdcall ReadHeader(HANDLE hArcData, tHeaderData* HeaderData) {
 	GetSystemTime(&st);
 	HeaderData->FileTime = SystemTimeToDosDateTime(st);
 
-	currentIndex++;
+	currentArchive->IncrementIndex();
 	return 0;
 }
 
@@ -676,13 +679,15 @@ int __stdcall ProcessFile(HANDLE hArcData, int Operation, char* DestPath, char* 
 
 int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPath, const wchar_t* DestName)
 {
+	PakArchive* currentArchive = GetArchive(hArcData);
+
 	try {
-		if (!currentArchive || hArcData != reinterpret_cast<HANDLE>(1)) {
+		if (!currentArchive) {
 			LogError("[ProcessFileW] Invalid archive handle or archive not open.");
 			return E_BAD_ARCHIVE;
 		}
 
-		int entryIndex = currentIndex - 1;
+		int entryIndex = currentArchive->GetCurrentIndex() - 1;
 
 		if (entryIndex < 0 || entryIndex >= static_cast<int>(currentArchive->GetEntryCount())) {
 			LogError("[ProcessFileW] Entry index out of range: " + std::to_string(entryIndex));
@@ -695,25 +700,21 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 			return E_NO_FILES;
 		}
 
-		LogInfo("[ProcessFileW] Processing entry: " + entry->name +
+		LogInfo("[ProcessFileW] Starting operation " + std::to_string(Operation) +
+			" on entry: " + entry->name +
 			", size=" + std::to_string(entry->size) +
 			", originalSize=" + std::to_string(entry->originalSize) +
-			", compression=" + std::to_string(static_cast<int>(entry->compression)) +
-			", isDirectory=" + std::to_string(entry->isDirectory) +
-			", Operation=" + std::to_string(Operation));
+			", compression=" + std::to_string(static_cast<int>(entry->compression)));
 
 
 
 		if (Operation == PK_TEST) {
 			if (entry->isDirectory) return 0;
-
 			std::vector<uint8_t> processedContent = currentArchive->DecompressEntryData(entry);
 
 			const size_t CHUNK_SIZE = 16384;
 			size_t pos = 0;
 			int result = 1;
-
-			LogInfo("[ProcessFileW] PK_TEST: Streaming " + std::to_string(processedContent.size()) + " bytes to TC callback.");
 
 			while (pos < processedContent.size()) {
 				size_t chunkSize = std::min(CHUNK_SIZE, processedContent.size() - pos);
@@ -729,7 +730,6 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 
 				pos += chunkSize;
 			}
-			LogInfo("[ProcessFileW] PK_TEST streaming finished.");
 			return 0;
 		}
 
@@ -746,7 +746,7 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 					LogError("[ProcessFileW] Failed to create directory: " + WStringToUTF8(fullDestPath));
 					return E_EWRITE;
 				}
-				LogInfo("[ProcessFileW] Created directory: " + WStringToUTF8(fullDestPath));
+				LogInfo("[ProcessFileW] Successfully created directory: " + WStringToUTF8(fullDestPath));
 				return 0;
 			}
 
@@ -760,7 +760,6 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 		}
 
 		if (Operation == PK_SKIP) {
-			LogInfo("[ProcessFileW] Operation SKIP, skipping entry: " + entry->name);
 			return 0;
 		}
 
@@ -778,13 +777,24 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 }
 
 int __stdcall CloseArchive(HANDLE hArcData) {
-	if (!currentArchive || hArcData != reinterpret_cast<HANDLE>(1)) {
-		LogError("Invalid archive handle or archive not open in CloseArchive.");
+	PakArchive* archiveToClose = GetArchive(hArcData);
+
+	if (!archiveToClose) {
+		LogError("Invalid archive handle in CloseArchive.");
 		return E_ECLOSE;
 	}
-	currentArchive.reset();
-	currentIndex = 0;
-	LogInfo("Archive successfully closed.");
+
+	try {
+		delete archiveToClose;
+		LogInfo("Archive successfully closed and resources released.");
+	} catch (const std::exception& ex) {
+		LogError(std::string("CloseArchive EXCEPTION during delete: ") + ex.what());
+		return E_ECLOSE;
+	} catch (...) {
+		LogError("CloseArchive Unknown EXCEPTION during delete.");
+		return E_ECLOSE;
+	}
+
 	return 0;
 }
 
