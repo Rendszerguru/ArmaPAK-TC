@@ -1,10 +1,12 @@
 #include "edds_converter.h"
+
 #include <algorithm>
 #include <memory>
 #include <sstream>
 #include <iomanip>
 #include <cmath>
 #include <cstring>
+#include <stdexcept>
 
 namespace fs = std::filesystem;
 
@@ -23,9 +25,9 @@ namespace fs = std::filesystem;
 #define DDSCAPS_MIPMAP    0x00000040
 #define DDSCAPS_TEXTURE   0x00001000
 
-#define FOURCC_DXT1 0x31545844 // 'DXT1'
-#define FOURCC_DXT5 0x35545844 // 'DXT5'
-#define FOURCC_DX10 0x30315844 // 'DX10'
+#define FOURCC_DXT1 0x31545844
+#define FOURCC_DXT5 0x35545844
+#define FOURCC_DX10 0x30315844
 
 #pragma pack(push, 1)
 typedef struct {
@@ -105,222 +107,229 @@ void ConvertToDDS(const std::string& eddsPath, const std::string& ddsPath) {
 		return;
 	}
 
-	std::vector<uint8_t> ddsHeader(128);
-	input.read(reinterpret_cast<char*>(ddsHeader.data()), 128);
-	if (input.gcount() != 128) {
-		LogError("[ConvertToDDS] Invalid DDS header in file: " + eddsPath + ". Expected 128 bytes, got " + std::to_string(input.gcount()));
-		return;
-	}
-	if (std::memcmp(ddsHeader.data(), "DDS ", 4) != 0) {
-		LogError("[ConvertToDDS] DDS magic number not found. Invalid EDDS file.");
-		return;
-	}
-
-
-	std::vector<uint8_t> ddsHeaderDx10;
-	if (ddsHeader[84] == 'D' && ddsHeader[85] == 'X' &&
-		ddsHeader[86] == '1' && ddsHeader[87] == '0') {
-		ddsHeaderDx10.resize(20);
-		input.read(reinterpret_cast<char*>(ddsHeaderDx10.data()), 20);
-		if (input.gcount() != 20) {
-			LogError("[ConvertToDDS] Invalid DX10 header in file: " + eddsPath + ". Expected 20 bytes, got " + std::to_string(input.gcount()));
+	try {
+		std::vector<uint8_t> ddsHeader(128);
+		input.read(reinterpret_cast<char*>(ddsHeader.data()), 128);
+		if (input.gcount() != 128) {
+			LogError("[ConvertToDDS] Invalid DDS header in file: " + eddsPath + ". Expected 128 bytes, got " + std::to_string(input.gcount()));
 			return;
 		}
-	}
-
-	struct Block {
-		std::string type;
-		int32_t size;
-	};
-	std::vector<Block> blocks;
-
-	while (true) {
-		char blockName[4] = { 0 };
-		int32_t size = 0;
-
-		input.read(blockName, 4);
-		if (input.gcount() != 4) {
-			break;
+		if (std::memcmp(ddsHeader.data(), "DDS ", 4) != 0) {
+			LogError("[ConvertToDDS] DDS magic number not found. Invalid EDDS file.");
+			return;
 		}
 
-		input.read(reinterpret_cast<char*>(&size), 4);
-		if (input.gcount() != 4) {
-			break;
+
+		std::vector<uint8_t> ddsHeaderDx10;
+		if (ddsHeader[84] == 'D' && ddsHeader[85] == 'X' &&
+			ddsHeader[86] == '1' && ddsHeader[87] == '0') {
+			ddsHeaderDx10.resize(20);
+			input.read(reinterpret_cast<char*>(ddsHeaderDx10.data()), 20);
+			if (input.gcount() != 20) {
+				LogError("[ConvertToDDS] Invalid DX10 header in file: " + eddsPath + ". Expected 20 bytes, got " + std::to_string(input.gcount()));
+				return;
+			}
 		}
 
-		std::string blockStr(blockName, 4);
-		int32_t original_size = size;
+		struct Block {
+			std::string type;
+			int32_t size;
+		};
+		std::vector<Block> blocks;
 
-		if (blockStr != "COPY" && blockStr != "LZ4 ") {
-			input.seekg(-8, std::ios::cur);
-			break;
-		}
+		while (true) {
+			char blockName[4] = { 0 };
+			int32_t size = 0;
 
-		if (size < 0 || static_cast<uint32_t>(size) > 100 * 1024 * 1024) {
-			size = static_cast<int32_t>(SwapEndian(static_cast<uint32_t>(original_size)));
+			input.read(blockName, 4);
+			if (input.gcount() != 4) {
+				break;
+			}
+
+			input.read(reinterpret_cast<char*>(&size), 4);
+			if (input.gcount() != 4) {
+				break;
+			}
+
+			std::string blockStr(blockName, 4);
+			int32_t original_size = size;
+
+			if (blockStr != "COPY" && blockStr != "LZ4 ") {
+				input.seekg(-8, std::ios::cur);
+				break;
+			}
+
 			if (size < 0 || static_cast<uint32_t>(size) > 100 * 1024 * 1024) {
-				LogError("[ConvertToDDS] Invalid block size even after byte order swap for block type '" + blockStr + "'. Aborting block search.");
-				break;
-			}
-		}
-
-		blocks.push_back({ blockStr, size });
-	}
-
-	if (blocks.empty()) {
-		LogError("[ConvertToDDS] No data block (COPY/LZ4) found.");
-		return;
-	}
-
-
-	std::vector<std::vector<uint8_t>> decodedBlockContents;
-	decodedBlockContents.reserve(blocks.size());
-
-	for (size_t i = 0; i < blocks.size(); i++) {
-		const auto& block = blocks[i];
-		std::vector<uint8_t> currentBlockData;
-
-		if (block.size <= 0) {
-			LogError("[ConvertToDDS] [WARN] Invalid block size " + std::to_string(block.size) + " at block #" + std::to_string(i) + " (type: " + block.type + "). Skipping.");
-			continue;
-		}
-
-		if (block.type == "COPY") {
-			currentBlockData.resize(static_cast<size_t>(block.size));
-			input.read(reinterpret_cast<char*>(currentBlockData.data()), block.size);
-			if (input.gcount() != block.size) {
-				LogError("[ConvertToDDS] [WARN] Failed to read full COPY block at #" + std::to_string(i) + ". Expected " + std::to_string(block.size) + " bytes, got " + std::to_string(input.gcount()) + ". Aborting block processing.");
-				break;
-			}
-		}
-		else if (block.type == "LZ4 ") {
-			uint32_t decompressedTotalSize = 0;
-			input.read(reinterpret_cast<char*>(&decompressedTotalSize), sizeof(decompressedTotalSize));
-			if (!input) {
-				LogError("[ConvertToDDS] [ERROR] Cannot read decompressed size for LZ4 block #" + std::to_string(i) + ". Aborting block processing.");
-				break;
+				size = static_cast<int32_t>(SwapEndian(static_cast<uint32_t>(original_size)));
+				if (size < 0 || static_cast<uint32_t>(size) > 100 * 1024 * 1024) {
+					LogError("[ConvertToDDS] Invalid block size even after byte order swap for block type '" + blockStr + "'. Aborting block search.");
+					break;
+				}
 			}
 
-			size_t compressedBlockActualSize = static_cast<size_t>(block.size) - sizeof(decompressedTotalSize);
-			if (static_cast<int>(compressedBlockActualSize) <= 0) {
-				LogError("[ConvertToDDS] [WARN] LZ4 block size is too small (less than 4 bytes for total decompressed size) at #" + std::to_string(i) + ". Skipping.");
+			blocks.push_back({ blockStr, size });
+		}
+
+		if (blocks.empty()) {
+			LogError("[ConvertToDDS] No data block (COPY/LZ4) found.");
+			return;
+		}
+
+		std::vector<std::vector<uint8_t>> decodedBlockContents;
+		decodedBlockContents.reserve(blocks.size());
+
+		for (size_t i = 0; i < blocks.size(); i++) {
+			const auto& block = blocks[i];
+			std::vector<uint8_t> currentBlockData;
+
+			if (block.size <= 0) {
+				LogError("[ConvertToDDS] [WARN] Invalid block size " + std::to_string(block.size) + " at block #" + std::to_string(i) + " (type: " + block.type + "). Skipping.");
 				continue;
 			}
 
-			std::vector<char> compressedData(compressedBlockActualSize);
-			input.read(compressedData.data(), compressedBlockActualSize);
-			if (input.gcount() != static_cast<std::streamsize>(compressedBlockActualSize)) {
-				LogError("[ConvertToDDS] [WARN] Failed to read full LZ4 compressed data for block #" + std::to_string(i) + ". Expected " + std::to_string(compressedBlockActualSize) + " bytes, got " + std::to_string(input.gcount()) + ". Aborting block processing.");
-				break;
+			if (block.type == "COPY") {
+				currentBlockData.resize(static_cast<size_t>(block.size));
+				input.read(reinterpret_cast<char*>(currentBlockData.data()), block.size);
+				if (input.gcount() != block.size) {
+					LogError("[ConvertToDDS] [WARN] Failed to read full COPY block at #" + std::to_string(i) + ". Expected " + std::to_string(block.size) + " bytes, got " + std::to_string(input.gcount()) + ". Aborting block processing.");
+					break;
+				}
 			}
-
-			currentBlockData.resize(decompressedTotalSize);
-
-			std::unique_ptr<LZ4_streamDecode_t, decltype(&LZ4_freeStreamDecode)> lz4Stream(
-				LZ4_createStreamDecode(), &LZ4_freeStreamDecode);
-
-			if (!lz4Stream) {
-				LogError("[ConvertToDDS] [ERROR] Failed to create LZ4 decode stream for block #" + std::to_string(i) + ". Aborting block processing.");
-				break;
-			}
-
-			size_t outPos = 0;
-			size_t readPos = 0;
-
-			while (readPos < compressedBlockActualSize) {
-				if (readPos + sizeof(int32_t) > compressedBlockActualSize) {
-					LogError("[ConvertToDDS] [WARN] Unexpected end of compressed LZ4 block data at chunk header for block #" + std::to_string(i) + ".\n");
-					currentBlockData.clear();
+			else if (block.type == "LZ4 ") {
+				uint32_t decompressedTotalSize = 0;
+				input.read(reinterpret_cast<char*>(&decompressedTotalSize), sizeof(decompressedTotalSize));
+				if (!input) {
+					LogError("[ConvertToDDS] [ERROR] Cannot read decompressed size for LZ4 block #" + std::to_string(i) + ". Aborting block processing.");
 					break;
 				}
 
-				int32_t rawChunkSize;
-				std::memcpy(&rawChunkSize, compressedData.data() + readPos, sizeof(int32_t));
-				readPos += sizeof(int32_t);
+				size_t compressedBlockActualSize = static_cast<size_t>(block.size) - sizeof(decompressedTotalSize);
+				if (static_cast<int>(compressedBlockActualSize) <= 0) {
+					LogError("[ConvertToDDS] [WARN] LZ4 block size is too small (less than 4 bytes for total decompressed size) at #" + std::to_string(i) + ". Skipping.");
+					continue;
+				}
 
-				int32_t currentChunkDataSize = rawChunkSize & 0x7FFFFFFF;
-
-				if (currentChunkDataSize == 0 || readPos + static_cast<size_t>(currentChunkDataSize) > compressedBlockActualSize) {
-					LogError("[ConvertToDDS] [WARN] Invalid chunk data size/bounds for chunk at LZ4 block #" + std::to_string(i) + ", offset " + std::to_string(readPos - 4) + ". Skipping chunk.");
-					currentBlockData.clear();
+				std::vector<char> compressedData(compressedBlockActualSize);
+				input.read(compressedData.data(), compressedBlockActualSize);
+				if (input.gcount() != static_cast<std::streamsize>(compressedBlockActualSize)) {
+					LogError("[ConvertToDDS] [WARN] Failed to read full LZ4 compressed data for block #" + std::to_string(i) + ". Expected " + std::to_string(compressedBlockActualSize) + " bytes, got " + std::to_string(input.gcount()) + ". Aborting block processing.");
 					break;
 				}
 
-				int bytesProcessed = LZ4_decompress_safe_continue(
-					lz4Stream.get(),
-					compressedData.data() + readPos,
-					reinterpret_cast<char*>(currentBlockData.data()) + outPos,
-					currentChunkDataSize,
-					static_cast<int>(currentBlockData.size() - outPos)
-				);
+				currentBlockData.resize(decompressedTotalSize);
 
-				if (bytesProcessed <= 0) {
-					LogError("[ConvertToDDS] [ERROR] LZ4 decompress error at block #" + std::to_string(i) + ", chunk offset " + std::to_string(readPos - 4) + ". Error code: " + std::to_string(bytesProcessed) + ". Aborting chunk processing.\n");
-					currentBlockData.clear();
+				std::unique_ptr<LZ4_streamDecode_t, decltype(&LZ4_freeStreamDecode)> lz4Stream(
+					LZ4_createStreamDecode(), &LZ4_freeStreamDecode);
+
+				if (!lz4Stream) {
+					LogError("[ConvertToDDS] [ERROR] Failed to create LZ4 decode stream for block #" + std::to_string(i) + ". Aborting block processing.");
 					break;
 				}
 
-				outPos += bytesProcessed;
-				readPos += static_cast<size_t>(currentChunkDataSize);
+				size_t outPos = 0;
+				size_t readPos = 0;
+
+				while (readPos < compressedBlockActualSize) {
+					if (readPos + sizeof(int32_t) > compressedBlockActualSize) {
+						LogError("[ConvertToDDS] [WARN] Unexpected end of compressed LZ4 block data at chunk header for block #" + std::to_string(i) + ".\n");
+						currentBlockData.clear();
+						break;
+					}
+
+					int32_t rawChunkSize;
+					std::memcpy(&rawChunkSize, compressedData.data() + readPos, sizeof(int32_t));
+					readPos += sizeof(int32_t);
+
+					int32_t currentChunkDataSize = rawChunkSize & 0x7FFFFFFF;
+
+					if (currentChunkDataSize == 0 || readPos + static_cast<size_t>(currentChunkDataSize) > compressedBlockActualSize) {
+						LogError("[ConvertToDDS] [WARN] Invalid chunk data size/bounds for chunk at LZ4 block #" + std::to_string(i) + ", offset " + std::to_string(readPos - 4) + ". Skipping chunk.");
+						currentBlockData.clear();
+						break;
+					}
+
+					int bytesProcessed = LZ4_decompress_safe_continue(
+						lz4Stream.get(),
+						compressedData.data() + readPos,
+						reinterpret_cast<char*>(currentBlockData.data()) + outPos,
+						currentChunkDataSize,
+						static_cast<int>(currentBlockData.size() - outPos)
+					);
+
+					if (bytesProcessed <= 0) {
+						LogError("[ConvertToDDS] [ERROR] LZ4 decompress error at block #" + std::to_string(i) + ", chunk offset " + std::to_string(readPos - 4) + ". Error code: " + std::to_string(bytesProcessed) + ". Aborting chunk processing.\n");
+						currentBlockData.clear();
+						break;
+					}
+
+					outPos += bytesProcessed;
+					readPos += static_cast<size_t>(currentChunkDataSize);
+				}
+
+				if (!currentBlockData.empty() && static_cast<uint32_t>(outPos) != decompressedTotalSize) {
+					LogError("[ConvertToDDS] [WARN] Decompressed size mismatch for LZ4 block #" + std::to_string(i)
+						+ " (expected " + std::to_string(decompressedTotalSize) + ", got " + std::to_string(outPos) + "). This might indicate a parsing issue.");
+				}
+
+				if (currentBlockData.empty()) continue;
+
 			}
 
-			if (!currentBlockData.empty() && static_cast<uint32_t>(outPos) != decompressedTotalSize) {
-				LogError("[ConvertToDDS] [WARN] Decompressed size mismatch for LZ4 block #" + std::to_string(i)
-					+ " (expected " + std::to_string(decompressedTotalSize) + ", got " + std::to_string(outPos) + "). This might indicate a parsing issue.");
-			}
-
-			if (currentBlockData.empty()) continue;
-
+			decodedBlockContents.push_back(std::move(currentBlockData));
 		}
 
-		decodedBlockContents.push_back(std::move(currentBlockData));
+
+		std::vector<uint8_t> decodedData;
+		size_t totalDataSize = 0;
+		for (const auto& content : decodedBlockContents) {
+			totalDataSize += content.size();
+		}
+		decodedData.reserve(totalDataSize);
+
+		for (auto it = decodedBlockContents.rbegin(); it != decodedBlockContents.rend(); ++it) {
+			decodedData.insert(decodedData.end(), it->begin(), it->end());
+		}
+
+		std::ofstream output(ddsPath, std::ios::binary);
+		if (!output) {
+			LogError("[ConvertToDDS] [ERROR] Cannot write DDS file: " + ddsPath);
+			return;
+		}
+
+		DDS_HEADER* pHeader = reinterpret_cast<DDS_HEADER*>(ddsHeader.data() + 4);
+		bool headerFixed = false;
+
+		const size_t firstMipMapSize = GetFirstMipmapSize(*pHeader);
+
+		if (firstMipMapSize > 0 && decodedData.size() >= firstMipMapSize) {
+			pHeader->dwMipMapCount = 1;
+			pHeader->dwCaps &= ~DDSCAPS_MIPMAP;
+			pHeader->dwCaps &= ~DDSCAPS_COMPLEX;
+			pHeader->dwCaps |= DDSCAPS_TEXTURE;
+			headerFixed = true;
+		}
+
+
+		output.write(reinterpret_cast<const char*>(ddsHeader.data()), static_cast<std::streamsize>(ddsHeader.size()));
+		if (!ddsHeaderDx10.empty()) {
+			output.write(reinterpret_cast<const char*>(ddsHeaderDx10.data()), static_cast<std::streamsize>(ddsHeaderDx10.size()));
+		}
+
+		if (headerFixed) {
+			output.write(reinterpret_cast<const char*>(decodedData.data()), static_cast<std::streamsize>(firstMipMapSize));
+		}
+		else {
+			output.write(reinterpret_cast<const char*>(decodedData.data()), static_cast<std::streamsize>(decodedData.size()));
+		}
+
+		if (!output.good()) {
+			LogError("[ConvertToDDS] Failed to finalize output file writing.");
+		}
 	}
-
-
-	std::vector<uint8_t> decodedData;
-	size_t totalDataSize = 0;
-	for (const auto& content : decodedBlockContents) {
-		totalDataSize += content.size();
+	catch (const std::exception& ex) {
+		LogError(std::string("[ConvertToDDS] General EXCEPTION: ") + ex.what());
 	}
-	decodedData.reserve(totalDataSize);
-
-	for (auto it = decodedBlockContents.rbegin(); it != decodedBlockContents.rend(); ++it) {
-		decodedData.insert(decodedData.end(), it->begin(), it->end());
-	}
-
-	std::ofstream output(ddsPath, std::ios::binary);
-	if (!output) {
-		LogError("[ConvertToDDS] [ERROR] Cannot write DDS file: " + ddsPath);
-		return;
-	}
-
-	DDS_HEADER* pHeader = reinterpret_cast<DDS_HEADER*>(ddsHeader.data() + 4);
-	bool headerFixed = false;
-
-	const size_t firstMipMapSize = GetFirstMipmapSize(*pHeader);
-
-	if (firstMipMapSize > 0 && decodedData.size() >= firstMipMapSize) {
-		pHeader->dwMipMapCount = 1;
-		pHeader->dwCaps &= ~DDSCAPS_MIPMAP;
-		pHeader->dwCaps &= ~DDSCAPS_COMPLEX;
-		pHeader->dwCaps |= DDSCAPS_TEXTURE;
-		headerFixed = true;
-	}
-
-
-	output.write(reinterpret_cast<const char*>(ddsHeader.data()), static_cast<std::streamsize>(ddsHeader.size()));
-	if (!ddsHeaderDx10.empty()) {
-		output.write(reinterpret_cast<const char*>(ddsHeaderDx10.data()), static_cast<std::streamsize>(ddsHeaderDx10.size()));
-	}
-
-	if (headerFixed) {
-		output.write(reinterpret_cast<const char*>(decodedData.data()), static_cast<std::streamsize>(firstMipMapSize));
-	}
-	else {
-		output.write(reinterpret_cast<const char*>(decodedData.data()), static_cast<std::streamsize>(decodedData.size()));
-	}
-
-	if (!output.good()) {
-		LogError("[ConvertToDDS] Failed to finalize output file writing.");
+	catch (...) {
+		LogError("[ConvertToDDS] Unknown EXCEPTION during conversion.");
 	}
 }
