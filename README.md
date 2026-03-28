@@ -15,7 +15,7 @@ Total Commander plugin that allows for managing Arma Reforger .PAK archives, rea
   Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search within archive contents.
 - **Automatic extraction of compressed files** (Zlib).
 - **Smart Extract (Dependency handling):** 🧠
-  Automatically analyzes .xob and .emat files during extraction to identify and extract all required dependencies (like textures). It is capable of retrieving these files **across multiple active archives** within the same session, ensuring your models always have their materials.
+  Automatically analyzes .xob and .emat files during extraction to identify and extract all required dependencies (like textures). It is capable of retrieving these files **across multiple active archives** within the same session, ensuring your models always have their materials. (Disabled by default)
 - **Keep Directory Structure:** 📂
   Optionally preserves the original internal folder hierarchy of the archive during extraction, ensuring all files land in their intended subfolders.
 - **EDDS to DDS conversion:** Automatically converts `.edds` image files to standard `.dds` format upon extraction.
