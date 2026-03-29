@@ -18,7 +18,7 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 - **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required textures, provided they are located within the **currently active or opened archives**.
 - **Intelligent Folders:** 📂 Optionally preserves the original internal folder hierarchy **during file copying and extraction** (`KeepDirectoryStructure`). It automatically resolves path conflicts to prevent redundant "folder-in-folder" duplicates.
 - **Built-in Image Conversion:** Automatically converts game-specific `.edds` files to standard `.dds` format during extraction. 
-  - *Tip:* You can view these images directly in Total Commander (**F3**) if you have [IrfanView](https://www.irfanview.com) installed.
+- *Tip:* You can view these images directly in Total Commander (**F3**) using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
 - **Advanced Search:** Search for specific text inside archive files using Total Commander’s standard **Find Files** (`Alt + F7`) tool.
 
 <img width="512" height="288" alt="ArmaPAK_Interface" src="https://github.com/user-attachments/assets/5ba5447a-5679-4c6f-94ff-4f50c6b98d38" />
