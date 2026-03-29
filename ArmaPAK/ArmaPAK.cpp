@@ -36,7 +36,7 @@
 
 namespace fs = std::filesystem;
 
-const char* PLUGIN_VERSION_STRING = "1.1.0";
+const char* PLUGIN_VERSION_STRING = "1.1.5";
 
 extern std::unique_ptr<ThreadPool> g_ThreadPool;
 
@@ -78,6 +78,7 @@ bool g_EnableEddsConversion = true;
 bool g_EnableLogInfo = false;
 bool g_EnableSmartExtract = false;
 bool g_KeepDirectoryStructure = true;
+bool g_ShowExtractPrompt = true;
 static std::wstring SearchTextW;
 
 static std::unordered_map<std::string, std::unique_ptr<std::mutex>> g_FileWriteLocks;
@@ -157,6 +158,7 @@ static void LoadSettings() {
 	g_EnableLogInfo = GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_LOG_INFO, 0, iniPath.c_str()) != 0;
 	g_EnableSmartExtract = GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_SMART_EXTRACT, 1, iniPath.c_str()) != 0;
 	g_KeepDirectoryStructure = GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_KEEP_STRUCT, 1, iniPath.c_str()) != 0;
+	g_ShowExtractPrompt = GetPrivateProfileIntA(INI_SECTION_NAME, "ShowExtractPrompt", 1, iniPath.c_str()) != 0;
 }
 
 static void SaveSettings() {
@@ -165,6 +167,7 @@ static void SaveSettings() {
 	WritePrivateProfileStringA(INI_SECTION_NAME, INI_KEY_LOG_INFO, g_EnableLogInfo ? "1" : "0", iniPath.c_str());
 	WritePrivateProfileStringA(INI_SECTION_NAME, INI_KEY_SMART_EXTRACT, g_EnableSmartExtract ? "1" : "0", iniPath.c_str());
 	WritePrivateProfileStringA(INI_SECTION_NAME, INI_KEY_KEEP_STRUCT, g_KeepDirectoryStructure ? "1" : "0", iniPath.c_str());
+	WritePrivateProfileStringA(INI_SECTION_NAME, "ShowExtractPrompt", g_ShowExtractPrompt ? "1" : "0", iniPath.c_str());
 }
 
 static unsigned int SystemTimeToDosDateTime(const SYSTEMTIME& st) {
@@ -979,6 +982,10 @@ inline std::string ws2s(const std::wstring& wstr)
 	return strTo;
 }
 
+static bool g_ExtractOptionsShown = false;
+
+static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+
 int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPath, const wchar_t* DestName)
 {
 	PakArchive* currentArchive = GetArchive(hArcData);
@@ -987,6 +994,13 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 		if (!currentArchive) {
 			LogError("[ProcessFileW] Invalid archive handle or archive not open.");
 			return E_BAD_ARCHIVE;
+		}
+
+		if (Operation == PK_EXTRACT && !g_ExtractOptionsShown) {
+			g_ExtractOptionsShown = true;
+			if (g_ShowExtractPrompt) {
+				DialogBoxParam(g_hModule, MAKEINTRESOURCE(IDD_EXTRACT_OPTIONS), NULL, SettingsDialogProc, 0);
+			}
 		}
 
 		int entryIndex = currentArchive->GetLastIndex();
@@ -1051,8 +1065,30 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 			LogInfo("[ProcessFileW][DEBUG] DestPath: " + std::string(ws2s(wDestPath)));
 			LogInfo("[ProcessFileW][DEBUG] DestName: " + std::string(ws2s(wDestName)));
 
-			fs::path fullTargetPath;
+			bool isFolderCopy = false;
+			if (!wDestName.empty() && !isViewer) {
+				fs::path pDest(wDestName);
+				fs::path pInternal(UTF8ToWString(entry->name));
 
+				if (pDest.has_parent_path() && pInternal.has_parent_path()) {
+					std::wstring destLastFolder = pDest.parent_path().filename().wstring();
+					std::wstring intLastFolder = pInternal.parent_path().filename().wstring();
+
+					std::transform(destLastFolder.begin(), destLastFolder.end(), destLastFolder.begin(), ::tolower);
+					std::transform(intLastFolder.begin(), intLastFolder.end(), intLastFolder.begin(), ::tolower);
+
+					if (!destLastFolder.empty() && destLastFolder == intLastFolder) {
+						isFolderCopy = true;
+						LogInfo("[ProcessFileW][DEBUG] Folder copy detected (Parent match: " + ws2s(destLastFolder) + ")");
+					}
+				}
+			}
+
+			LogInfo("[ProcessFileW][DEBUG] Flags -> SmartExtract: " + std::to_string(g_EnableSmartExtract) +
+				", FolderCopy: " + std::to_string(isFolderCopy) +
+				", Viewer: " + std::to_string(isViewer));
+
+			fs::path fullTargetPath;
 			if (!wDestName.empty()) {
 				fullTargetPath = fs::path(wDestName);
 			} else if (!wDestPath.empty()) {
@@ -1064,25 +1100,29 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 			fullTargetPath = fullTargetPath.lexically_normal();
 
 			fs::path basePath = fullTargetPath;
-			if (basePath.has_filename() && basePath.extension() != "") {
+			if (isFolderCopy || (basePath.has_filename() && basePath.extension() != "")) {
 				basePath = basePath.parent_path();
 			}
 			std::string baseDestPath = basePath.string();
 
 			if (entry->isDirectory) {
-				fs::path dirPath = PakArchive::BuildFinalPath(baseDestPath, entry->name);
+				fs::path dirPath = isFolderCopy ? fullTargetPath : PakArchive::BuildFinalPath(baseDestPath, entry->name);
 				try {
 					fs::create_directories(dirPath);
-					LogInfo("[ProcessFileW] Successfully created directory: " + dirPath.string());
+					LogInfo("[ProcessFileW] Directory created: " + dirPath.string());
 					return 0;
 				} catch (...) {
 					LogError("[ProcessFileW] Failed to create directory: " + dirPath.string());
 					return E_EWRITE;
 				}
 			} else {
-				if (isViewer) {
+				if (isViewer || isFolderCopy) {
+					if (isFolderCopy && g_EnableSmartExtract) {
+						LogInfo("[ProcessFileW][DEBUG] SmartExtract is ENABLED but SKIPPED because FolderCopy is active.");
+					}
+
 					std::string directFilePath = fullTargetPath.string();
-					LogInfo("[ProcessFileW][DEBUG] Viewer extraction path: " + directFilePath);
+					LogInfo("[ProcessFileW][DEBUG] Direct/Forced extraction path: " + directFilePath);
 
 					success = currentArchive->ExtractFile(entryIndex, directFilePath);
 					finalLogPath = directFilePath;
@@ -1136,6 +1176,8 @@ int __stdcall CloseArchive(HANDLE hArcData) {
 		LogError("Invalid archive handle in CloseArchive.");
 		return E_ECLOSE;
 	}
+
+	g_ExtractOptionsShown = false;
 
 	try {
 		delete archiveToClose;
@@ -1225,31 +1267,53 @@ static INT_PTR CALLBACK AboutDialogProc(HWND hDlg, UINT message, WPARAM wParam, 
 static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
 	switch (message) {
 	case WM_INITDIALOG: {
-		HBITMAP hBmp = LoadBitmap(g_hModule, MAKEINTRESOURCE(IDB_LOGO));
-		if (hBmp) {
-			SendDlgItemMessage(hDlg, IDC_LOGO, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBmp);
+		HWND hLogoCtrl = GetDlgItem(hDlg, IDC_LOGO);
+		if (hLogoCtrl) {
+			HBITMAP hBmp = LoadBitmap(g_hModule, MAKEINTRESOURCE(IDB_LOGO));
+			if (hBmp) {
+				SendMessage(hLogoCtrl, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBmp);
+			} else {
+				LogError("Failed to load settings dialog bitmap IDB_LOGO.");
+			}
 		}
-		else {
-			LogError("Failed to load settings dialog bitmap IDB_LOGO.");
-		}
+
 		CheckDlgButton(hDlg, IDC_ENABLE_EDDS_CONVERSION, g_EnableEddsConversion ? BST_CHECKED : BST_UNCHECKED);
-		CheckDlgButton(hDlg, IDC_ENABLE_LOG_INFO, g_EnableLogInfo ? BST_CHECKED : BST_UNCHECKED);
 		CheckDlgButton(hDlg, IDC_ENABLE_SMART_EXTRACT, g_EnableSmartExtract ? BST_CHECKED : BST_UNCHECKED);
 		CheckDlgButton(hDlg, IDC_KEEP_STRUCT, g_KeepDirectoryStructure ? BST_CHECKED : BST_UNCHECKED);
+
+		if (GetDlgItem(hDlg, IDC_ENABLE_LOG_INFO)) {
+			CheckDlgButton(hDlg, IDC_ENABLE_LOG_INFO, g_EnableLogInfo ? BST_CHECKED : BST_UNCHECKED);
+		}
+
+		if (GetDlgItem(hDlg, IDC_SHOW_EXTRACT_PROMPT)) {
+			CheckDlgButton(hDlg, IDC_SHOW_EXTRACT_PROMPT, g_ShowExtractPrompt ? BST_CHECKED : BST_UNCHECKED);
+		}
+
 		return TRUE;
 	}
 	case WM_COMMAND: {
 		switch (LOWORD(wParam)) {
 		case IDOK: {
 			g_EnableEddsConversion = (IsDlgButtonChecked(hDlg, IDC_ENABLE_EDDS_CONVERSION) == BST_CHECKED);
-			g_EnableLogInfo = (IsDlgButtonChecked(hDlg, IDC_ENABLE_LOG_INFO) == BST_CHECKED);
 			g_EnableSmartExtract = (IsDlgButtonChecked(hDlg, IDC_ENABLE_SMART_EXTRACT) == BST_CHECKED);
 			g_KeepDirectoryStructure = (IsDlgButtonChecked(hDlg, IDC_KEEP_STRUCT) == BST_CHECKED);
+
+			if (GetDlgItem(hDlg, IDC_ENABLE_LOG_INFO)) {
+				g_EnableLogInfo = (IsDlgButtonChecked(hDlg, IDC_ENABLE_LOG_INFO) == BST_CHECKED);
+			}
+
+			if (GetDlgItem(hDlg, IDC_SHOW_EXTRACT_PROMPT)) {
+				g_ShowExtractPrompt = (IsDlgButtonChecked(hDlg, IDC_SHOW_EXTRACT_PROMPT) == BST_CHECKED);
+			}
+
 			SaveSettings();
+
 			LogInfo("EDDS to DDS conversion setting: " + std::string(g_EnableEddsConversion ? "Enabled" : "Disabled"));
 			LogInfo("Log Info messages setting: " + std::string(g_EnableLogInfo ? "Enabled" : "Disabled"));
 			LogInfo("Smart Extract setting: " + std::string(g_EnableSmartExtract ? "Enabled" : "Disabled"));
 			LogInfo("Keep Directory Structure setting: " + std::string(g_KeepDirectoryStructure ? "Enabled" : "Disabled"));
+			LogInfo("Show Extract Prompt setting: " + std::string(g_ShowExtractPrompt ? "Enabled" : "Disabled"));
+
 			EndDialog(hDlg, LOWORD(wParam));
 			return TRUE;
 		}
@@ -1265,9 +1329,12 @@ static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wPara
 		break;
 	}
 	case WM_DESTROY: {
-		HBITMAP hBmp = (HBITMAP)SendDlgItemMessage(hDlg, IDC_LOGO, STM_GETIMAGE, IMAGE_BITMAP, 0);
-		if (hBmp) {
-			DeleteObject(hBmp);
+		HWND hLogoCtrl = GetDlgItem(hDlg, IDC_LOGO);
+		if (hLogoCtrl) {
+			HBITMAP hBmp = (HBITMAP)SendMessage(hLogoCtrl, STM_GETIMAGE, IMAGE_BITMAP, 0);
+			if (hBmp) {
+				DeleteObject(hBmp);
+			}
 		}
 		return TRUE;
 	}
