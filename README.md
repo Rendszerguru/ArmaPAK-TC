@@ -18,8 +18,8 @@ Total Commander plugin that allows for managing Arma Reforger .PAK archives, rea
   A compact dialog appears before extraction, allowing you to toggle EDDS conversion and Smart Extract on-the-fly. This prompt can be disabled in the settings for a silent workflow.
 - **Smart Extract (Dependency handling):** 🧠
   Automatically analyzes .xob and .emat files during extraction to identify and extract all required dependencies (like textures). It is capable of retrieving these files **across multiple active archives** within the same session. (Disabled by default)
-- **Intelligent Folder Handling:** 📂
-  Preserves the original internal folder hierarchy. It automatically detects if you are extracting into an identically named folder and adjusts to avoid redundant nested structures.
+- **Keep Directory Structure:** 📂
+  Optionally preserves the original internal folder hierarchy during file copying and extraction, ensuring a clean and organized output.
 - **EDDS to DDS conversion:** Automatically converts `.edds` image files to standard `.dds` format upon extraction.
   → While browsing the contents of a `.pak` file, the converted `.dds` images can be opened directly in **Total Commander’s viewer (F3)** using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
 - **Advanced Configuration:** EDDS conversion, Smart Extraction, and Directory Structure settings can be managed in the `pak_plugin.ini` file or via the configuration dialog of [Plugman](https://totalcmd.net/plugring/tc_plugman.html).
