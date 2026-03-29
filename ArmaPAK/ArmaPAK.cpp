@@ -36,7 +36,7 @@
 
 namespace fs = std::filesystem;
 
-const char* PLUGIN_VERSION_STRING = "1.1.5";
+const char* PLUGIN_VERSION_STRING = "1.1.6";
 
 extern std::unique_ptr<ThreadPool> g_ThreadPool;
 
@@ -997,9 +997,16 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 		}
 
 		if (Operation == PK_EXTRACT && !g_ExtractOptionsShown) {
-			g_ExtractOptionsShown = true;
-			if (g_ShowExtractPrompt) {
-				DialogBoxParam(g_hModule, MAKEINTRESOURCE(IDD_EXTRACT_OPTIONS), NULL, SettingsDialogProc, 0);
+			std::wstring wCheckName = DestName ? DestName : L"";
+			bool isViewerRequest =
+				(wCheckName.find(L"\\_tc\\") != std::wstring::npos) ||
+				(wCheckName.find(L"/_tc/") != std::wstring::npos);
+
+			if (!isViewerRequest) {
+				g_ExtractOptionsShown = true;
+				if (g_ShowExtractPrompt) {
+					DialogBoxParam(g_hModule, MAKEINTRESOURCE(IDD_EXTRACT_OPTIONS), NULL, SettingsDialogProc, 0);
+				}
 			}
 		}
 
