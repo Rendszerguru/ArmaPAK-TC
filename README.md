@@ -14,9 +14,9 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 ### ✨ **Main Features**
 
 - **Browse & View:** Open any `.pak` file and navigate its contents like a normal directory.
-- **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact window pops up before copying or unpacking, allowing you to quickly change **extraction settings** for the current task. (This can be disabled in settings for a silent workflow).
-- **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required textures, even if they are stored in different archives.
-- **Intelligent Folders:** 📂 Optionally maintains the original folder hierarchy **during file copying and extraction**. It automatically handles path naming to prevent messy "folder-in-folder" duplicates.
+- **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact window pops up before copying or unpacking, allowing you to modify **extraction settings** on-the-fly. (This can be disabled in settings for a silent workflow).
+- **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required textures, provided they are located within the **currently active or opened archives**.
+- **Intelligent Folders:** 📂 Optionally preserves the original internal folder hierarchy **during file copying and extraction** (`KeepDirectoryStructure`). It automatically resolves path conflicts to prevent redundant "folder-in-folder" duplicates.
 - **Built-in Image Conversion:** Automatically converts game-specific `.edds` files to standard `.dds` format during extraction. 
   - *Tip:* You can view these images directly in Total Commander (**F3**) if you have [IrfanView](https://www.irfanview.com) installed.
 - **Advanced Search:** Search for specific text inside archive files using Total Commander’s standard **Find Files** (`Alt + F7`) tool.
@@ -31,19 +31,20 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 Simply open the **ArmaPAK-TC.zip** inside Total Commander and follow the automatic installation prompt.
 
 #### **Manual Method**
-1. Extract `ArmaPAK.wcx` (and `ArmaPAK.wcx64`) to your Total Commander `Plugins\wcx\` folder.
-2. Go to **Configuration** → **Options** → **Plugins**.
-3. In the **Compressor Plugins** section, click **Configure**.
-4. Associate the **PAK** extension with the `ArmaPAK.wcx` file.
+1. Extract `ArmaPAK.wcx` (and `ArmaPAK.wcx64` for 64-bit systems) to your Total Commander `Plugins\wcx\` folder.
+2. Launch Total Commander and go to: **Configuration** → **Options** → **Plugins**.
+3. In the **Compressor Plugins (.WCX)** section, click **Configure**.
+4. Enter **PAK** as the extension, click **New Type**, and select the `ArmaPAK.wcx` file.
+5. Click **OK**.
 
 ---
 
 ### 📖 **How to Use**
 
-- **Enter Archive:** Double-click or press **Enter** on a `.pak` file.
-- **Copying / Unpacking:** Use **F5** (Copy) or **Alt + F9** (Unpack). Use the pop-up window to toggle conversion or smart dependency settings.
+- **Enter Archive:** Double-click or press **Enter** (or **Ctrl+PageDown**) on a `.pak` file.
+- **Copying / Unpacking:** Use **F5** (Copy) or **Alt + F9** (Unpack). Use the pop-up window to adjust extraction parameters for the current task.
 - **Searching:** Press **Alt + F7**, check "Find text", and the plugin will look inside the compressed files for you.
-- **Configuration:** You can fine-tune the plugin's behavior using the [Plugman](https://totalcmd.net/plugring/tc_plugman.html) utility or by editing the `pak_plugin.ini` file.
+- **Configuration:** Fine-tune the plugin's behavior using the [Plugman](https://totalcmd.net/plugring/tc_plugman.html) utility or by editing the `pak_plugin.ini` file.
 
 ---
 
