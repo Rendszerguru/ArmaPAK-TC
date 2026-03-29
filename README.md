@@ -14,7 +14,7 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 ### ✨ **Main Features**
 
 - **Browse & View:** Open any `.pak` file and navigate its contents like a normal directory.
-- **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact window pops up before copying or unpacking, allowing you to modify **extraction settings** on-the-fly. (This can be disabled in settings for a silent workflow).
+- **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact window pops up before copying or unpacking, allowing you to modify **extraction settings** on-the-fly. This prompt can be disabled in the settings for a silent workflow.
 - **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required textures, provided they are located within the **currently active or opened archives**.
 - **Intelligent Folders:** 📂 Optionally preserves the original internal folder hierarchy **during file copying and extraction** (`KeepDirectoryStructure`). It automatically resolves path conflicts to prevent redundant "folder-in-folder" duplicates.
 - **Built-in Image Conversion:** Automatically converts game-specific `.edds` files to standard `.dds` format during extraction. 
