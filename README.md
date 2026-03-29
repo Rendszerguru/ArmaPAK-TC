@@ -5,59 +5,52 @@
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
 
-Total Commander plugin that allows for managing Arma Reforger .PAK archives, reading files, **searching**, and extracting them.
+This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if they were regular folders. You can browse, search, and extract files with specialized support for game assets.
 
-<img width="512" height="512" alt="ArmaPAK_" src="https://github.com/user-attachments/assets/9f6c5e7a-5c4d-42ed-84d0-38aee0a3d048" />
+<img width="512" height="512" alt="ArmaPAK_Logo" src="https://github.com/user-attachments/assets/9f6c5e7a-5c4d-42ed-84d0-38aee0a3d048" />
 
-### ✨ **Features**
-- **Display the contents of PAK archives.**
-- **Full-text search support inside PAK files:**
-  Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search within archive contents.
-- **Automatic extraction of compressed files** (Zlib).
-- **Quick Extract Options (F5 / Alt+F9):** ⚡
-  A compact dialog appears before extraction, allowing you to toggle EDDS conversion and Smart Extract on-the-fly. This prompt can be disabled in the settings for a silent workflow.
-- **Smart Extract (Dependency handling):** 🧠
-  Automatically analyzes .xob and .emat files during extraction to identify and extract all required dependencies (like textures). It is capable of retrieving these files **across multiple active archives** within the same session. (Disabled by default)
-- **Keep Directory Structure:** 📂
-  Optionally preserves the original internal folder hierarchy during file copying and extraction, ensuring a clean and organized output.
-- **EDDS to DDS conversion:** Automatically converts `.edds` image files to standard `.dds` format upon extraction.
-  → While browsing the contents of a `.pak` file, the converted `.dds` images can be opened directly in **Total Commander’s viewer (F3)** using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
-- **Advanced Configuration:** EDDS conversion, Smart Extraction, and Directory Structure settings can be managed in the `pak_plugin.ini` file or via the configuration dialog of [Plugman](https://totalcmd.net/plugring/tc_plugman.html).
+---
 
-<img width="512" height="288" alt="armapak" src="https://github.com/user-attachments/assets/5ba5447a-5679-4c6f-94ff-4f50c6b98d38" />
+### ✨ **Main Features**
 
-- **Targeted error logging:** A `pak_plugin.log` file is created next to the plugin with automatic **log rotation** (5MB limit) to save disk space. Optional detailed logging can be enabled via `EnableLogInfo`.
+- **Browse & View:** Open any `.pak` file and navigate its contents like a normal directory.
+- **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact window pops up before copying or unpacking, allowing you to quickly change **extraction settings** for the current task. (This can be disabled in settings for a silent workflow).
+- **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required textures, even if they are stored in different archives.
+- **Intelligent Folders:** 📂 Optionally maintains the original folder hierarchy **during file copying and extraction**. It automatically handles path naming to prevent messy "folder-in-folder" duplicates.
+- **Built-in Image Conversion:** Automatically converts game-specific `.edds` files to standard `.dds` format during extraction. 
+  - *Tip:* You can view these images directly in Total Commander (**F3**) if you have [IrfanView](https://www.irfanview.com) installed.
+- **Advanced Search:** Search for specific text inside archive files using Total Commander’s standard **Find Files** (`Alt + F7`) tool.
+
+<img width="512" height="288" alt="ArmaPAK_Interface" src="https://github.com/user-attachments/assets/5ba5447a-5679-4c6f-94ff-4f50c6b98d38" />
 
 ---
 
 ### 🚀 **Installation**
 
-#### **Automatic Installation**
-Simply unzip the **ArmaPAK-TC.zip** file and press **Enter** to automatically install the plugin in Total Commander.
+#### **Automatic Method**
+Simply open the **ArmaPAK-TC.zip** inside Total Commander and follow the automatic installation prompt.
 
-#### **Manual Installation**
-If the automatic installation doesn’t work, follow these steps:
-
-1. Extract the `ArmaPAK.wcx` (and `ArmaPAK.wcx64` for 64-bit) file into the Total Commander installation directory, under the **Plugins\wcx** subfolder.
-   Example: `C:\TotalCommander\Plugins\wcx\ArmaPAK.wcx`
-
-2. Launch Total Commander.
-3. Navigate to: **Configuration menu** → **Options...** → **Plugins tab**.
-4. In the right window, under the "Compressor Plugins (.WCX)" section, click the **Settings** button.
-5. In the pop-up "Assign" window, enter **PAK** as a new extension.
-6. Click **New Type**, then select the `ArmaPAK.wcx` file.
-7. Click **OK**.
+#### **Manual Method**
+1. Extract `ArmaPAK.wcx` (and `ArmaPAK.wcx64`) to your Total Commander `Plugins\wcx\` folder.
+2. Go to **Configuration** → **Options** → **Plugins**.
+3. In the **Compressor Plugins** section, click **Configure**.
+4. Associate the **PAK** extension with the `ArmaPAK.wcx` file.
 
 ---
 
-### 📖 **Usage**
-- **Select a .pak file** and press **Enter** (or **Ctrl+PageDown**) to view its contents.
-- **Extraction (F5):** When copying files, a quick options window appears (if enabled). You can confirm or change extraction settings (like EDDS conversion) for the current task.
-- **Smart Extracting:** When you copy an `.xob` or `.emat` file, the plugin will automatically attempt to pull all related textures from the archives.
-- **Search:** Press **Alt + F7**, enable **Find text**, and search directly within `.pak` contents.
+### 📖 **How to Use**
+
+- **Enter Archive:** Double-click or press **Enter** on a `.pak` file.
+- **Copying / Unpacking:** Use **F5** (Copy) or **Alt + F9** (Unpack). Use the pop-up window to toggle conversion or smart dependency settings.
+- **Searching:** Press **Alt + F7**, check "Find text", and the plugin will look inside the compressed files for you.
+- **Configuration:** You can fine-tune the plugin's behavior using the [Plugman](https://totalcmd.net/plugring/tc_plugman.html) utility or by editing the `pak_plugin.ini` file.
 
 ---
 
 ### 📄 **License**
-This plugin is **free software**, released **"as is."**
-Use is at your own risk. Redistribution is permitted as long as the distribution remains intact.
+This plugin is **free software**, provided **"as is."** You are free to redistribute it as long as the package remains unmodified.
+
+---
+
+### 🧑‍💻 **Author**
+**Icebird** Copyright © 2026. All rights reserved.
