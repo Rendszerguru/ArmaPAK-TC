@@ -5,7 +5,7 @@
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
 
-This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if they were regular folders. You can browse, search, and extract files with specialized support for game assets.
+This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if they were regular folders. You can browse, **search**, and extract files with specialized support for game assets.
 
 <img width="512" height="512" alt="ArmaPAK_Logo" src="https://github.com/user-attachments/assets/9f6c5e7a-5c4d-42ed-84d0-38aee0a3d048" />
 
