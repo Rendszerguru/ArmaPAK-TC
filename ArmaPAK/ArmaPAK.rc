@@ -4,9 +4,9 @@
 IDB_LOGO BITMAP "armapak.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
-// Settings dialog
+// Settings dialog (Plugman / Full config)
 
-IDD_ARMAPAK_SETTINGS DIALOGEX 0, 0, 340, 150
+IDD_ARMAPAK_SETTINGS DIALOGEX 0, 0, 340, 165
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Arma PAK Plugin Settings"
 FONT 9, "Segoe UI"
@@ -28,9 +28,35 @@ BEGIN
 	CONTROL         "Smart Extract (Auto-copy EMAT/EDDS)", IDC_ENABLE_SMART_EXTRACT, "Button",
 					BS_AUTOCHECKBOX | WS_TABSTOP, 168, 75, 160, 10
 
-	PUSHBUTTON      "About...",     IDC_ABOUT_BUTTON, 168, 124, 40, 14
-	DEFPUSHBUTTON   "OK",           IDOK,              213, 124, 50, 14
-	PUSHBUTTON      "Cancel",       IDCANCEL,           268, 124, 50, 14
+	CONTROL         "Show options dialog before extraction", IDC_SHOW_EXTRACT_PROMPT, "Button",
+					BS_AUTOCHECKBOX | WS_TABSTOP, 168, 90, 160, 10
+
+	PUSHBUTTON      "About...",     IDC_ABOUT_BUTTON, 168, 139, 40, 14
+	DEFPUSHBUTTON   "OK",           IDOK,              213, 139, 50, 14
+	PUSHBUTTON      "Cancel",       IDCANCEL,           268, 139, 50, 14
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// Extract Options dialog (F5 - Compact version to avoid DPI issues)
+
+IDD_EXTRACT_OPTIONS DIALOGEX 0, 0, 200, 120
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Quick Unpack Options"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT           "Confirm unpacking settings:", IDC_STATIC, 10, 10, 180, 10
+
+    CONTROL         "Enable EDDS to DDS conversion", IDC_ENABLE_EDDS_CONVERSION, "Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP, 10, 30, 180, 10
+
+    CONTROL         "Keep internal directory structure", IDC_KEEP_STRUCT, "Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP, 10, 45, 180, 10
+
+    CONTROL         "Smart Extract (Auto-dependency)", IDC_ENABLE_SMART_EXTRACT, "Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP, 10, 60, 180, 10
+
+    DEFPUSHBUTTON   "OK", IDOK, 85, 100, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 140, 100, 50, 14
 END
 
 /////////////////////////////////////////////////////////////////////////////
@@ -43,7 +69,7 @@ FONT 9, "Segoe UI"
 BEGIN
     CONTROL         "", IDC_ABOUT_LOGO, "Static", SS_BITMAP | WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 1, 10, 148, 128
 
-    LTEXT           "ARMA PAK Plugin v1.1.0", IDC_ABOUT_VERSION_TEXT, 10, 145, 130, 10, SS_CENTER
+    LTEXT           "ARMA PAK Plugin v1.1.5", IDC_ABOUT_VERSION_TEXT, 10, 145, 130, 10, SS_CENTER
     LTEXT           "by Icebird", IDC_ABOUT_AUTHOR_TEXT, 10, 155, 130, 10, SS_CENTER
 
     LTEXT           "\251 2026 Icebird. All rights reserved.", IDC_ABOUT_SUPPORT_TEXT, 10, 165, 130, 10, SS_CENTER
