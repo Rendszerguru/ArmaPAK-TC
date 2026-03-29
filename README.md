@@ -14,7 +14,7 @@ Total Commander plugin that allows for managing Arma Reforger .PAK archives, rea
 - **Full-text search support inside PAK files:**
   Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search within archive contents.
 - **Automatic extraction of compressed files** (Zlib).
-- **Quick Extract Options (F5):** ⚡
+- **Quick Extract Options (F5 / Alt+F9):** ⚡
   A compact dialog appears before extraction, allowing you to toggle EDDS conversion and Smart Extract on-the-fly. This prompt can be disabled in the settings for a silent workflow.
 - **Smart Extract (Dependency handling):** 🧠
   Automatically analyzes .xob and .emat files during extraction to identify and extract all required dependencies (like textures). It is capable of retrieving these files **across multiple active archives** within the same session. (Disabled by default)
