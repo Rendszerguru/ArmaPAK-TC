@@ -53,9 +53,10 @@ This plugin is **free software**, provided **"as is."** You are free to redistri
 
 ### ⚖️ **Legal Disclaimer**
 - **Unofficial Tool:** This is an unofficial community-made plugin. It is not affiliated with, endorsed, or sponsored by Bohemia Interactive.
-- **Purpose:** This tool is designed for educational purposes and to streamline the modding workflow. It provides transparency similar to the official Workbench tools.
-- **No DRM Bypass:** This plugin does **not** bypass any digital rights management (DRM), encryption, or obfuscation provided by the game developers.
-- **User Responsibility:** Users are solely responsible for complying with the **Arma Reforger End User License Agreement (EULA)**. The developer does not condone or support the unauthorized distribution or "ripping" of copyrighted assets. Use this tool only with your own content or assets you have legal permission to access.
+- **Purpose:** This tool is designed for educational purposes and to streamline the modding workflow for veteran creators.
+- **No DRM Bypass:** This plugin does **not** bypass any digital rights management (DRM), encryption, or proprietary obfuscation. It only operates on accessible archive structures.
+- **Asset Visualization:** The `.edds` to standard image conversion is a technical compatibility feature designed to allow file visualization and identification within the Total Commander environment. This process is intended to help modders study asset structures and does not imply any ownership or right to redistribute the converted files.
+- **User Responsibility:** Users are strictly responsible for complying with the **Arma Reforger End User License Agreement (EULA)**. The developer does not condone or support the unauthorized extraction or distribution of copyrighted assets. This tool must be used in accordance with Bohemia Interactive's modding guidelines and intellectual property rights.
 
 ---
 
