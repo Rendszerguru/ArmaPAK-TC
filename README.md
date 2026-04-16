@@ -22,6 +22,8 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 - **Full-text Search Support:** Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search directly within archive contents.
 - **Viewer Integration:** View game assets directly in the viewer (**F3**) using [IrfanView](https://www.irfanview.com) and the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html).
 
+<img width="512" height="302" alt="armapak" src="https://github.com/user-attachments/assets/670de00a-c25b-468d-8a60-bf9d84747242" />
+
 ---
 
 ### ⚙️ **Configuration**
