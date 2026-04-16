@@ -51,6 +51,12 @@ Simply open the **ArmaPAK-TC.zip** inside Total Commander and follow the automat
 ### 📄 **License**
 This plugin is **free software**, provided **"as is."** You are free to redistribute it as long as the package remains unmodified.
 
+### ⚖️ **Legal Disclaimer**
+- **Unofficial Tool:** This is an unofficial community-made plugin. It is not affiliated with, endorsed, or sponsored by Bohemia Interactive.
+- **Purpose:** This tool is designed for educational purposes and to streamline the modding workflow. It provides transparency similar to the official Workbench tools.
+- **No DRM Bypass:** This plugin does **not** bypass any digital rights management (DRM), encryption, or obfuscation provided by the game developers.
+- **User Responsibility:** Users are solely responsible for complying with the **Arma Reforger End User License Agreement (EULA)**. The developer does not condone or support the unauthorized distribution or "ripping" of copyrighted assets. Use this tool only with your own content or assets you have legal permission to access.
+
 ---
 
 ### 🧑‍💻 **Author**
