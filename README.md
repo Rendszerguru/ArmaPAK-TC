@@ -1,7 +1,6 @@
 # 📦 Arma PAK Plugin for Total Commander
 
 [![Version](https://img.shields.io/badge/version-1.1.6-blue.svg)](https://github.com/Rendszerguru/ArmaPAK-TC/releases/latest)
-[![TC IrfanView](https://img.shields.io/badge/TC%20IrfanView-Plugin-orange.svg)](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html)
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
 
@@ -15,13 +14,10 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 
 - **Browse & View:** Open any `.pak` file and navigate its contents like a normal directory.
 - **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact window pops up before copying or unpacking, allowing you to modify **extraction settings** on-the-fly. This prompt can be disabled in the settings for a silent workflow.
-- **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required textures, provided they are located within the **currently active or opened archives**.
+- **Smart Extract (Dependencies):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required assets (including `.edds` textures), provided they are located within the **currently active or opened archives**.
 - **Intelligent Folders:** 📂 Optionally preserves the original internal folder hierarchy **during file copying and extraction** (`KeepDirectoryStructure`). It automatically detects and prevents redundant folder levels (e.g., `scripts/scripts/`) and ensures seamless file viewing (**F3**) without creating unnecessary directories.
-- **Built-in Image Conversion:** Automatically converts game-specific `.edds` files to standard `.dds` format during extraction. 
-  - *Tip:* You can view these images directly in Total Commander (**F3**) using [IrfanView](https://www.irfanview.com) with the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html) installed.
 - **Advanced Search:** Search for specific text inside archive files using Total Commander’s standard **Find Files** (`Alt + F7`) tool.
-
-<img width="512" height="288" alt="ArmaPAK_Interface" src="https://github.com/user-attachments/assets/5ba5447a-5679-4c6f-94ff-4f50c6b98d38" />
+- **Workbench Integration:** Quick launch support to open assets directly in the Arma Reforger Workbench from the extraction dialog.
 
 ---
 
@@ -44,7 +40,7 @@ Simply open the **ArmaPAK-TC.zip** inside Total Commander and follow the automat
 - **Enter Archive:** Double-click or press **Enter** (or **Ctrl+PageDown**) on a `.pak` file.
 - **Copying / Unpacking:** Use **F5** (Copy) or **Alt + F9** (Unpack). Use the pop-up window to adjust extraction parameters for the current task.
 - **Searching:** Press **Alt + F7**, check "Find text", and the plugin will look inside the compressed files for you.
-- **Configuration:** Fine-tune the plugin's behavior using the [Plugman](https://totalcmd.net/plugring/tc_plugman.html) utility or by editing the `pak_plugin.ini` file.
+- **Configuration:** Fine-tune the plugin's behavior using the [Plugman](https://totalcmd.net/plugring/tc_plugman.html) utility or by using the settings dialog inside Total Commander.
 
 ---
 
@@ -55,7 +51,6 @@ This plugin is **free software**, provided **"as is."** You are free to redistri
 - **Unofficial Tool:** This is an unofficial community-made plugin. It is not affiliated with, endorsed, or sponsored by Bohemia Interactive.
 - **Purpose:** This tool is designed for educational purposes and to streamline the modding workflow for veteran creators.
 - **No DRM Bypass:** This plugin does **not** bypass any digital rights management (DRM), encryption, or proprietary obfuscation. It only operates on accessible archive structures.
-- **Asset Visualization:** The `.edds` to standard image conversion is a technical compatibility feature designed to allow file visualization and identification within the Total Commander environment. This process is intended to help modders study asset structures and does not imply any ownership or right to redistribute the converted files.
 - **User Responsibility:** Users are strictly responsible for complying with the **Arma Reforger End User License Agreement (EULA)**. The developer does not condone or support the unauthorized extraction or distribution of copyrighted assets. This tool must be used in accordance with Bohemia Interactive's modding guidelines and intellectual property rights.
 
 ---
