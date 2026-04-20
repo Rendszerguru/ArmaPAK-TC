@@ -146,12 +146,14 @@
 	</ItemDefinitionGroup>
 	<ItemGroup>
 		<ClCompile Include="ArmaPAK.cpp" />
+		<ClCompile Include="WorkbenchModule.cpp" />
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="wcxhead.h" />
 		<ClInclude Include="pak_index.h" />
-		<ClInclude Include="SmartExtractor.h" />
 		<ClInclude Include="ThreadPool.h" />
+		<ClInclude Include="SmartExtractor.h" />
+		<ClInclude Include="WorkbenchModule.h" />
 	</ItemGroup>
 	<ItemGroup>
 		<None Include="ArmaPAK.def" />
