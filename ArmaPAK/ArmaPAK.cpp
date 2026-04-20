@@ -3,10 +3,6 @@
 #ifndef TCM_GETITEMCOUNT
 #define TCM_GETITEMCOUNT (TCM_FIRST + 4)
 #endif
-#include "wcxhead.h"
-#include "resource.h"
-// EDDS és DDS konverterek eltávolítva
-#include "ThreadPool.h"
 
 #include <windows.h>
 #include <commctrl.h>
@@ -41,14 +37,30 @@
 
 namespace fs = std::filesystem;
 
-// EddsTargetFormat enum és hivatkozás eltávolítva
+namespace ImageModule {
+	struct Snapshot {
+		bool enabled = false;
+		int format = 0;
+	};
 
-const char* PLUGIN_VERSION_STRING = "1.2.0";
+	inline void LoadSettings(const std::string&, const std::string&) {}
+	inline void SaveSettings(const std::string&, const std::string&) {}
+	inline Snapshot GetGlobalSnapshot() { return { false, 0 }; }
+	inline Snapshot ResolveSnapshot(bool, bool) { return { false, 0 }; }
+	inline void AdjustDisplayName(std::string&, bool, const Snapshot&, void*, int) {}
+	inline std::filesystem::path ResolveExtractPath(const std::filesystem::path& p, const std::string&, const Snapshot&, bool, bool) { return p; }
+	inline void InitSettingsUI(HWND) {}
+	inline bool HandleSettingsCommand(HWND, WORD, WORD) { return false; }
+	inline void UpdateSettingsUI(HWND, void*) {}
+	inline bool ApplyAndRefreshIfNeeded(HWND, void*, bool) { return false; }
 
-extern std::unique_ptr<ThreadPool> g_ThreadPool;
-
-class PakArchive;
-class PakIndex;
+	inline bool SmartSave(const std::string&, const std::filesystem::path& finalPath, const std::vector<uint8_t>& data, const Snapshot&, bool) {
+		std::ofstream out(finalPath, std::ios::binary);
+		if (!out) return false;
+		out.write(reinterpret_cast<const char*>(data.data()), data.size());
+		return out.good();
+	}
+}
 
 class PakEntry {
 public:
@@ -58,7 +70,7 @@ public:
 	};
 
 	uint32_t timestamp = 0;
-	std::string name = "";
+	std::string name;
 	uint32_t offset = 0;
 	uint32_t size = 0;
 	uint32_t originalSize = 0;
@@ -67,8 +79,22 @@ public:
 	std::vector<std::shared_ptr<PakEntry>> children;
 };
 
-#include "SmartExtractor.h"
+#include "ThreadPool.h"
+
+class PakArchive;
+class PakIndex;
+
 #include "pak_index.h"
+#include "SmartExtractor.h"
+#include "WorkbenchModule.h"
+#include "wcxhead.h"
+#include "resource.h"
+
+PakEntry g_CurrentEntryForDialog;
+PakArchive* g_CurrentArchiveForDialog = nullptr;
+
+const char* PLUGIN_VERSION_STRING = "1.2.0";
+extern std::unique_ptr<ThreadPool> g_ThreadPool;
 
 void LogError(const std::string& message);
 void LogInfo(const std::string& message);
@@ -82,7 +108,6 @@ static std::mutex g_SearchTextMutex;
 std::vector<PakArchive*> g_OpenedArchives;
 std::mutex g_ArchivesMutex;
 
-// Konverziós kapcsolók eltávolítva
 bool g_EnableLogInfo = false;
 bool g_EnableSmartExtract = false;
 bool g_KeepDirectoryStructure = true;
@@ -96,7 +121,6 @@ const char* const INI_KEY_SMART_EXTRACT = "EnableSmartExtract";
 const char* const INI_KEY_KEEP_STRUCT = "KeepDirectoryStructure";
 const char* const INI_FILE_NAME = "pak_plugin.ini";
 const char* const INI_SECTION_NAME = "Settings";
-// EDDS kulcsok eltávolítva az INI-ből
 const char* const INI_KEY_LOG_INFO = "EnableLogInfo";
 const char* const LOG_FILE_NAME = "pak_plugin.log";
 
@@ -162,14 +186,20 @@ void LogInfo(const std::string& message) {
 
 static void LoadSettings() {
 	std::string iniPath = GetIniPath();
-	g_EnableLogInfo          = GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_LOG_INFO, 0, iniPath.c_str()) != 0;
-	g_EnableSmartExtract    = GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_SMART_EXTRACT, 1, iniPath.c_str()) != 0;
+
+	ImageModule::LoadSettings(iniPath, INI_SECTION_NAME);
+
+	g_EnableLogInfo= GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_LOG_INFO, 0, iniPath.c_str()) != 0;
+	g_EnableSmartExtract= GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_SMART_EXTRACT, 1, iniPath.c_str()) != 0;
 	g_KeepDirectoryStructure = GetPrivateProfileIntA(INI_SECTION_NAME, INI_KEY_KEEP_STRUCT, 1, iniPath.c_str()) != 0;
-	g_ShowExtractPrompt      = GetPrivateProfileIntA(INI_SECTION_NAME, "ShowExtractPrompt", 1, iniPath.c_str()) != 0;
+	g_ShowExtractPrompt= GetPrivateProfileIntA(INI_SECTION_NAME, "ShowExtractPrompt", 1, iniPath.c_str()) != 0;
 }
 
 static void SaveSettings() {
 	std::string iniPath = GetIniPath();
+
+	ImageModule::SaveSettings(iniPath, INI_SECTION_NAME);
+
 	WritePrivateProfileStringA(INI_SECTION_NAME, INI_KEY_LOG_INFO, g_EnableLogInfo ? "1" : "0", iniPath.c_str());
 	WritePrivateProfileStringA(INI_SECTION_NAME, INI_KEY_SMART_EXTRACT, g_EnableSmartExtract ? "1" : "0", iniPath.c_str());
 	WritePrivateProfileStringA(INI_SECTION_NAME, INI_KEY_KEEP_STRUCT, g_KeepDirectoryStructure ? "1" : "0", iniPath.c_str());
@@ -177,10 +207,10 @@ static void SaveSettings() {
 }
 
 static unsigned int SystemTimeToDosDateTime(const SYSTEMTIME& st) {
-	const unsigned int year   = static_cast<unsigned int>(st.wYear);
-	const unsigned int month  = static_cast<unsigned int>(st.wMonth);
-	const unsigned int day    = static_cast<unsigned int>(st.wDay);
-	const unsigned int hour   = static_cast<unsigned int>(st.wHour);
+	const unsigned int year= static_cast<unsigned int>(st.wYear);
+	const unsigned int month= static_cast<unsigned int>(st.wMonth);
+	const unsigned int day= static_cast<unsigned int>(st.wDay);
+	const unsigned int hour= static_cast<unsigned int>(st.wHour);
 	const unsigned int minute = static_cast<unsigned int>(st.wMinute);
 	const unsigned int second = static_cast<unsigned int>(st.wSecond);
 	unsigned int dosDate = ((year - 1980) << 9) | (month << 5) | day;
@@ -234,6 +264,8 @@ private:
 	tProcessDataProc m_pProcessDataProc = nullptr;
 
 	std::unordered_map<std::string, int> m_LookupTable;
+
+	ImageModule::Snapshot m_ImageSnapshot;
 
 	struct IffChunk {
 		char id[4];
@@ -532,7 +564,7 @@ public:
 			uLongf destLen = entry->originalSize;
 			int zResult = uncompress(
 				reinterpret_cast<Bytef*>(processedContent.data()), &destLen,
-				reinterpret_cast<const Bytef*>(rawBuffer.data()), entry->size);
+				reinterpret_cast<const Bytef*>(rawBuffer.data()), (uLong)entry->size);
 
 			if (zResult != Z_OK || destLen != entry->originalSize) {
 				LogError("[DecompressEntryData] Zlib error code: " + std::to_string(zResult) + " for " + entry->name);
@@ -546,6 +578,8 @@ public:
 
 	PakArchive(const std::string& filename) : filename(filename) {
 		try {
+			m_ImageSnapshot = ImageModule::GetGlobalSnapshot();
+
 			hFile = CreateFileA(filename.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (hFile == INVALID_HANDLE_VALUE) {
 				LogError("Failed to open PAK file (WinAPI): " + filename);
@@ -660,12 +694,13 @@ public:
 		m_LastIndex.store(-1, std::memory_order_relaxed);
 	}
 
-	// ConversionSnapshot hivatkozások eltávolítva
+	ImageModule::Snapshot GetImageSnapshot() const { return m_ImageSnapshot; }
+	void SetImageSnapshot(const ImageModule::Snapshot& s) { m_ImageSnapshot = s; }
 
 	void SetProcessDataProc(tProcessDataProc p) { m_pProcessDataProc = p; }
 	tProcessDataProc GetProcessDataProc() const { return m_pProcessDataProc; }
 
-static fs::path BuildFinalPath(const std::string& base, const std::string& entryName) {
+	static fs::path BuildFinalPath(const std::string& base, const std::string& entryName) {
 		fs::path basePath = base.empty()
 			? fs::current_path()
 			: fs::absolute(fs::path(base));
@@ -694,17 +729,11 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 		return fs::absolute(finalPath).lexically_normal();
 	}
 
-	// ============================
-	// 🔹 PathToLog
-	// ============================
 	static inline std::string PathToLog(const fs::path& p) {
 		auto u8 = p.u8string();
 		return std::string(reinterpret_cast<const char*>(u8.data()), u8.size());
 	}
 
-	// ============================
-	// 🔹 Decompress
-	// ============================
 	static bool DecompressEntryFast(PakArchive* arc, const PakEntry* entry, std::vector<uint8_t>& out) {
 		static std::mutex g_DecompressMutex;
 		std::lock_guard<std::mutex> lock(g_DecompressMutex);
@@ -718,9 +747,6 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 		return true;
 	}
 
-	// ============================
-	// 🔹 Path resolve
-	// ============================
 	static fs::path ResolveTargetPath(const std::string& destPath, const PakEntry* entry, bool& isDirectFileTarget) {
 		fs::path input(destPath);
 		isDirectFileTarget = input.has_filename() && !input.extension().empty();
@@ -735,9 +761,6 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 		return result;
 	}
 
-	// ============================
-	// 🔹 Ensure dir (FAST PATH)
-	// ============================
 	static inline bool EnsureDirFast(const fs::path& path) {
 		auto dir = path.parent_path();
 		if (dir.empty()) return true;
@@ -750,32 +773,6 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 		return true;
 	}
 
-	// ============================
-	// 🔹 Write RAW (BUFFERED LARGE WRITE + SEQ FLAG)
-	// ============================
-	static bool WriteRawFast(const fs::path& path, const uint8_t* data, size_t size) {
-		HANDLE hFile = CreateFileW(
-			path.wstring().c_str(),
-			GENERIC_WRITE,
-			FILE_SHARE_READ,
-			NULL,
-			CREATE_ALWAYS,
-			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-			NULL
-		);
-
-		if (hFile == INVALID_HANDLE_VALUE) return false;
-
-		DWORD written = 0;
-		BOOL ok = WriteFile(hFile, data, (DWORD)size, &written, NULL);
-
-		CloseHandle(hFile);
-		return ok && (written == (DWORD)size);
-	}
-
-	// ============================
-	// 🔹 Callback
-	// ============================
 	static bool ReportProgressFast(PakArchive* arc, const PakEntry* entry) {
 		auto cb = arc->GetProcessDataProc();
 		if (!cb) return true;
@@ -789,7 +786,7 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 			return true;
 		}
 
-		while (total < entry->originalSize) {
+		while (total < (size_t)entry->originalSize) {
 			size_t step = std::min(CHUNK, (size_t)entry->originalSize - total);
 
 			int res = 0;
@@ -805,9 +802,6 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 		return true;
 	}
 
-	// ============================
-	// 🔥 ExtractFile
-	// ============================
 	bool ExtractFile(int index, const std::string& destPath) {
 		const PakEntry* entry = GetEntry(index);
 
@@ -817,26 +811,21 @@ static fs::path BuildFinalPath(const std::string& base, const std::string& entry
 		}
 
 		try {
-			// 1️⃣ Path resolve & Early check
 			bool isDirect = false;
 			fs::path finalPath = ResolveTargetPath(destPath, entry, isDirect);
 
 			if (!EnsureDirFast(finalPath)) return false;
 
-			// 2️⃣ Decompress
 			std::vector<uint8_t> data;
 			if (!DecompressEntryFast(this, entry, data)) return false;
 
-			// 3️⃣ Write RAW (Minden konverziós logika eltávolítva)
-			LogInfo("[ExtractFile][DEBUG] Writing RAW: " + PathToLog(finalPath));
-			bool ok = WriteRawFast(finalPath, data.data(), data.size());
+			bool ok = ImageModule::SmartSave(entry->name, finalPath, data, m_ImageSnapshot, isDirect);
 
 			if (!ok) {
-				LogError("[ExtractFile] Write failed: " + PathToLog(finalPath));
+				LogError("[ExtractFile] Write/Convert failed: " + PathToLog(finalPath));
 				return false;
 			}
 
-			// 4️⃣ Progress report
 			if (!ReportProgressFast(this, entry)) {
 				LogInfo("[ExtractFile] Aborted by user");
 				return false;
@@ -864,543 +853,6 @@ inline std::string ws2s(const std::wstring& wstr)
 	return strTo;
 }
 
-const std::wstring WORKBENCH_EXE_NAME = L"ArmaReforgerWorkbenchSteamDiag.exe";
-const std::wstring WORKBENCH_FALLBACK_EXE = L"ArmaReforgerWorkbenchSteam.exe";
-
-static std::wstring GetWorkbenchPathFromRegistry() {
-	HKEY hKey;
-	std::wstring exePath = L"";
-	LPCWSTR subkey = L"SOFTWARE\\Bohemia Interactive\\Arma Reforger Tools";
-
-	struct RootKey {
-		HKEY hRoot;
-		const char* name;
-	} roots[] = {
-		{HKEY_LOCAL_MACHINE, "HKLM"},
-		{HKEY_CURRENT_USER,  "HKCU"}
-	};
-
-	LogInfo("[Debug] --- Registry Deep Search Start ---");
-
-	for (auto& root : roots) {
-		LogInfo("[Debug] Checking " + std::string(root.name) + "...");
-
-		DWORD flags[] = { KEY_WOW64_64KEY, KEY_WOW64_32KEY, 0 };
-
-		for (DWORD flag : flags) {
-			if (RegOpenKeyExW(root.hRoot, subkey, 0, KEY_READ | flag, &hKey) == ERROR_SUCCESS) {
-				LogInfo("[Debug] SUCCESS: Key opened in " + std::string(root.name) + " with flags: " + std::to_string(flag));
-
-				wchar_t buffer[MAX_PATH];
-				DWORD bufferSize = sizeof(buffer);
-
-				if (RegQueryValueExW(hKey, L"exe", NULL, NULL, (LPBYTE)buffer, &bufferSize) == ERROR_SUCCESS) {
-					exePath = buffer;
-					LogInfo("[Debug] 'exe' value found: " + ws2s(exePath));
-				} else {
-					bufferSize = sizeof(buffer);
-					if (RegQueryValueExW(hKey, L"path", NULL, NULL, (LPBYTE)buffer, &bufferSize) == ERROR_SUCCESS) {
-						exePath = std::wstring(buffer) + L"\\" + WORKBENCH_EXE_NAME;
-						LogInfo("[Debug] 'path' value found, constructed default exe path.");
-					}
-				}
-
-				RegCloseKey(hKey);
-				if (!exePath.empty()) break;
-			}
-		}
-		if (!exePath.empty()) break;
-	}
-
-	if (exePath.empty()) {
-		LogInfo("[Debug] Still not found, checking HKEY_CLASSES_ROOT\\enfusion...");
-		LPCWSTR uriKey = L"enfusion\\shell\\open\\command";
-		if (RegOpenKeyExW(HKEY_CLASSES_ROOT, uriKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-			wchar_t buffer[MAX_PATH * 2];
-			DWORD bufferSize = sizeof(buffer);
-			if (RegQueryValueExW(hKey, NULL, NULL, NULL, (LPBYTE)buffer, &bufferSize) == ERROR_SUCCESS) {
-				std::wstring fullCmd = buffer;
-				size_t firstQuote = fullCmd.find(L"\"");
-				size_t secondQuote = fullCmd.find(L"\"", firstQuote + 1);
-				if (firstQuote != std::wstring::npos && secondQuote != std::wstring::npos) {
-					exePath = fullCmd.substr(firstQuote + 1, secondQuote - firstQuote - 1);
-					LogInfo("[Debug] Found path in Enfusion URI handler: " + ws2s(exePath));
-				}
-			}
-			RegCloseKey(hKey);
-		}
-	}
-
-	if (!exePath.empty()) {
-		fs::path p(exePath);
-		std::vector<std::wstring> candidates;
-
-		candidates.push_back(p.wstring());
-
-		if (p.has_parent_path()) {
-			fs::path root = p.parent_path();
-
-			candidates.push_back((root / WORKBENCH_EXE_NAME).wstring());
-			candidates.push_back((root / L"Workbench" / WORKBENCH_EXE_NAME).wstring());
-
-			if (WORKBENCH_EXE_NAME != WORKBENCH_FALLBACK_EXE) {
-				candidates.push_back((root / WORKBENCH_FALLBACK_EXE).wstring());
-				candidates.push_back((root / L"Workbench" / WORKBENCH_FALLBACK_EXE).wstring());
-			}
-		}
-
-		bool found = false;
-		for (const auto& cand : candidates) {
-			if (!cand.empty() && fs::exists(cand) && !fs::is_directory(cand)) {
-				exePath = cand;
-				LogInfo("[Debug] Physical file VERIFIED: " + ws2s(exePath));
-				found = true;
-				break;
-			}
-		}
-
-		if (!found) {
-			LogError("[Debug] Path found in registry, but physical file not found: " + ws2s(exePath));
-			exePath = L"";
-		}
-	}
-
-	if (exePath.empty()) {
-		LogError("[Debug] ALL Registry locations and physical checks failed.");
-	}
-
-	LogInfo("[Debug] --- Registry Deep Search End ---");
-	return exePath;
-}
-
-struct WorkbenchContext {
-	std::string internalPath;
-	fs::path sandboxPath;
-	fs::path targetFilePath;
-	std::string ext;
-	std::string GUID_PROJECT = "A1B2C3D4E5F60789";
-	std::string projectName = "PAKViewer";
-	std::string wbModule = "resourceManager";
-	std::string loadResource;
-};
-
-using ExtensionProcessor = std::function<void(WorkbenchContext&)>;
-std::unordered_map<std::string, ExtensionProcessor> g_ExtensionLogic;
-
-struct ExtensionAutoReg {
-	ExtensionAutoReg() {
-		g_ExtensionLogic[".xob"] = [](WorkbenchContext& ctx) {
-			ctx.projectName = "XOBViewer";
-			ctx.wbModule = "resourceManager";
-
-			std::string GUID_XOB       = "D887766554433221";
-			std::string GUID_ENTITY    = "B9876543210FEDCB";
-			std::string GUID_COMPONENT = "C112233445566778";
-			std::string GUID_PREFAB    = "E554433221100998";
-
-			fs::path prefabDir = ctx.sandboxPath / "Prefabs";
-			fs::create_directories(prefabDir);
-
-			try {
-				std::ofstream xobMeta(ctx.targetFilePath.string() + ".meta");
-				xobMeta << "MetaFileClass {\n Name \"{" << GUID_XOB << "}" << ctx.internalPath
-						<< "\"\n Configurations {\n  StaticModelResourceClass PC {}\n }\n}";
-				xobMeta.close();
-
-				std::ofstream et(prefabDir / "preview.et");
-				et << "GenericEntity {\n ID \"" << GUID_ENTITY << "\"\n components {\n  MeshObject \"" << GUID_COMPONENT << "\" {\n    Object \"{" << GUID_XOB << "}" << ctx.internalPath << "\"\n  }\n }\n}";
-				et.close();
-
-				std::ofstream etMeta(prefabDir / "preview.et.meta");
-				etMeta << "MetaFileClass {\n Name \"{" << GUID_PREFAB << "}Prefabs/preview.et\"\n Configurations {\n  EntityTemplateResourceClass PC {}\n }\n}";
-				etMeta.close();
-
-				ctx.loadResource = "{" + GUID_PREFAB + "}Prefabs/preview.et";
-
-			} catch (...) {
-				LogInfo("[XOB Processor] Critical error while writing files!");
-				ctx.loadResource = "{" + ctx.GUID_PROJECT + "}" + ctx.internalPath;
-			}
-		};
-	}
-};
-
-//static ExtensionAutoReg g_DoReg;
-
-bool IsWorkbenchSupported(const std::string& extension) {
-	if (g_ExtensionLogic.count(extension)) {
-		return true;
-	}
-
-	static const std::unordered_set<std::string> supportedExtensions = {
- //       ".et", ".ent", ".layer", ".c", ".acp", ".sig", ".afm", ".snd", ".wav",
- //       ".agf", ".agr", ".anm", ".asi", ".ast", ".aw", ".ae", ".asy", ".txa",
- //       ".bt", ".ptc", ".layout", ".styles", ".imageset", ".emat", ".gamemat",
- //       ".physmat", ".edds", ".dds", ".st", ".nmn", ".pap", ".siga", ".conf",
- //       ".gproj", ".meta", ".pre", ".fnt", ".ttf"
-		  ".xob", ".c"
-	};
-
-	return supportedExtensions.count(extension) > 0;
-}
-
-int CountProcesses(const std::wstring& exeName) {
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (hSnap == INVALID_HANDLE_VALUE) return 0;
-
-	PROCESSENTRY32W pe;
-	pe.dwSize = sizeof(pe);
-	int count = 0;
-
-	if (Process32FirstW(hSnap, &pe)) {
-		do {
-			if (_wcsicmp(pe.szExeFile, exeName.c_str()) == 0) {
-				count++;
-			}
-		} while (Process32NextW(hSnap, &pe));
-	}
-
-	CloseHandle(hSnap);
-	return count;
-}
-
-bool WaitForSteamReady(int maxWaitSeconds) {
-	LogInfo("[Steam] Monitoring WebHelper count for initialization...");
-
-	int stableTicks = 0;
-	int lastCount = 0;
-
-	for (int i = 0; i < maxWaitSeconds; ++i) {
-		int currentCount = CountProcesses(L"steamwebhelper.exe");
-
-		if (currentCount >= 7 && currentCount == lastCount) {
-			stableTicks++;
-		} else {
-			stableTicks = 0;
-		}
-
-		lastCount = currentCount;
-
-		if (stableTicks >= 3) {
-			LogInfo("[Steam] Ready! WebHelper count stable at: " + std::to_string(currentCount));
-			return true;
-		}
-
-		std::this_thread::sleep_for(std::chrono::seconds(1));
-		if (i % 5 == 0) LogInfo("[Steam] Waiting... Current WebHelpers: " + std::to_string(currentCount));
-	}
-
-	LogInfo("[Steam] Timeout reached, continuing launch attempt anyway...");
-	return false;
-}
-
-BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-	DWORD pid;
-	GetWindowThreadProcessId(hwnd, &pid);
-	if (pid == (DWORD)lParam) {
-		PostMessage(hwnd, WM_CLOSE, 0, 0);
-	}
-	return TRUE;
-}
-
-bool IsSteamRunning() {
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (hSnap == INVALID_HANDLE_VALUE) return false;
-	PROCESSENTRY32W pe = { sizeof(pe) };
-	bool running = false;
-	if (Process32FirstW(hSnap, &pe)) {
-		do {
-			if (_wcsicmp(pe.szExeFile, L"steam.exe") == 0) {
-				running = true;
-				break;
-			}
-		} while (Process32NextW(hSnap, &pe));
-	}
-	CloseHandle(hSnap);
-	return running;
-}
-
-bool IsProcessRunning(const std::wstring& exeName) {
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (hSnap == INVALID_HANDLE_VALUE) return false;
-
-	PROCESSENTRY32W pe{ sizeof(pe) };
-	bool running = false;
-
-	for (BOOL ok = Process32FirstW(hSnap, &pe); ok; ok = Process32NextW(hSnap, &pe)) {
-		if (_wcsicmp(pe.szExeFile, exeName.c_str()) == 0) {
-			running = true;
-			break;
-		}
-	}
-
-	CloseHandle(hSnap);
-	return running;
-}
-
-bool IsWorkbenchRunning() {
-	return IsProcessRunning(WORKBENCH_EXE_NAME);
-}
-
-bool LaunchWorkbenchWithRetry(const std::wstring& cmd, const std::wstring& workDir, const fs::path& sandboxPath) {
-	const int maxRetries = 5;
-
-	for (int i = 0; i < maxRetries; ++i) {
-		if (!IsSteamRunning()) {
-			LogInfo("[Workbench] Steam not running, launching...");
-			ShellExecuteW(NULL, L"open", L"steam://open/main", NULL, NULL, SW_SHOWNORMAL);
-			WaitForSteamReady(45);
-		} else {
-			if (CountProcesses(L"steamwebhelper.exe") < 7) {
-				LogInfo("[Workbench] Steam running but WebHelpers starting, waiting...");
-				WaitForSteamReady(10);
-			}
-		}
-
-		LogInfo("[Workbench] Launch attempt #" + std::to_string(i + 1));
-
-		STARTUPINFOW si{ sizeof(si) };
-		si.dwFlags = STARTF_USESHOWWINDOW;
-		si.wShowWindow = SW_SHOWNORMAL;
-
-		PROCESS_INFORMATION pi{};
-		std::vector<wchar_t> buffer(cmd.begin(), cmd.end());
-		buffer.push_back(0);
-
-		if (!CreateProcessW(NULL, buffer.data(), NULL, NULL, FALSE, 0, NULL, workDir.c_str(), &si, &pi)) {
-			LogInfo("[Workbench] CreateProcessW failed: " + std::to_string(GetLastError()));
-			std::this_thread::sleep_for(std::chrono::seconds(3));
-			continue;
-		}
-
-		HANDLE hProcess = pi.hProcess;
-		DWORD pid = pi.dwProcessId;
-		CloseHandle(pi.hThread);
-
-		bool success = false;
-		for (int check = 0; check < 15; ++check) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-			DWORD currentExitCode;
-			if (!GetExitCodeProcess(hProcess, &currentExitCode)) break;
-
-			if (currentExitCode != STILL_ACTIVE) {
-				success = false;
-				break;
-			}
-
-			if (check >= 10) {
-				success = true;
-				break;
-			}
-		}
-
-		if (success) {
-			LogInfo("[Workbench] Process running (PID: " + std::to_string(pid) + ")");
-
-			std::thread([hProcess, sandboxPath, pid]() {
-				WaitForSingleObject(hProcess, INFINITE);
-
-				DWORD finalExit = 0;
-				GetExitCodeProcess(hProcess, &finalExit);
-				CloseHandle(hProcess);
-
-				std::this_thread::sleep_for(std::chrono::seconds(1));
-
-				if (finalExit == 0 && fs::exists(sandboxPath)) {
-					try {
-						fs::remove_all(sandboxPath);
-						LogInfo("[Cleanup] Sandbox deleted after Workbench (PID: " + std::to_string(pid) + ") closed.");
-					} catch (...) {
-						LogInfo("[Cleanup] Failed to delete sandbox (folder may be locked).");
-					}
-				} else if (finalExit == 0) {
-					LogInfo("[Cleanup] Sandbox folder already gone or inaccessible, skipping.");
-				} else {
-					LogInfo("[Cleanup] Process " + std::to_string(pid) + " closed via code or error (Exit: " + std::to_string(finalExit) + "), skipping cleanup.");
-				}
-			}).detach();
-
-			return true;
-		}
-
-		LogInfo("[Workbench] Process exited prematurely.");
-		CloseHandle(hProcess);
-		std::this_thread::sleep_for(std::chrono::seconds(3));
-	}
-
-	return false;
-}
-
-void TerminateWorkbench() {
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (hSnap == INVALID_HANDLE_VALUE) return;
-
-	PROCESSENTRY32W pe;
-	pe.dwSize = sizeof(pe);
-
-	if (Process32FirstW(hSnap, &pe)) {
-		do {
-			std::wstring exeName = pe.szExeFile;
-			if (_wcsicmp(exeName.c_str(), WORKBENCH_EXE_NAME.c_str()) == 0) {
-
-				DWORD pid = pe.th32ProcessID;
-
-				LogInfo("[Workbench] Existing process found (PID: " + std::to_string(pid) + "), sending close message...");
-
-				EnumWindows(EnumWindowsProc, pid);
-
-				HANDLE hProcess = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE, FALSE, pid);
-
-				if (hProcess) {
-					DWORD wait = WaitForSingleObject(hProcess, 5000);
-
-					if (wait == WAIT_TIMEOUT) {
-						LogInfo("[Workbench] Graceful close timeout, forcing termination (PID: " + std::to_string(pid) + ")");
-						TerminateProcess(hProcess, 0);
-						WaitForSingleObject(hProcess, 2000);
-					} else {
-						LogInfo("[Workbench] Process exited cleanly (PID: " + std::to_string(pid) + ")");
-					}
-
-					CloseHandle(hProcess);
-				} else {
-					LogInfo("[Workbench] Failed to open process handle (PID: " + std::to_string(pid) + ")");
-				}
-			}
-		} while (Process32NextW(hSnap, &pe));
-	}
-
-	CloseHandle(hSnap);
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(300));
-}
-
-// =====================================================
-// 🔥 WORKBENCH LAUNCH
-// =====================================================
-static bool OpenInWorkbench(const std::string& pakEntryPath, const std::string& extractedRoot) {
-	TerminateWorkbench();
-
-	for (int i = 0; i < 20; ++i) {
-		if (!IsWorkbenchRunning()) break;
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-	LogInfo("[Workbench] Launching via Retry system...");
-
-	std::wstring wbExe = GetWorkbenchPathFromRegistry();
-	if (wbExe.empty()) return false;
-
-	fs::path exePath(wbExe);
-	fs::path binDir = exePath.parent_path();
-
-	fs::path diagPath = binDir / WORKBENCH_EXE_NAME;
-	if (fs::exists(diagPath)) wbExe = diagPath.wstring();
-
-	fs::path toolsDir = binDir.parent_path();
-	fs::path commonDir = toolsDir.parent_path();
-	fs::path gameData = commonDir / L"Arma Reforger" / L"addons" / L"data";
-	fs::path sandboxPath = fs::path(extractedRoot);
-
-	WorkbenchContext ctx;
-	ctx.internalPath = pakEntryPath;
-
-	std::replace(ctx.internalPath.begin(), ctx.internalPath.end(), '\\', '/');
-	if (!ctx.internalPath.empty() && ctx.internalPath[0] == '/') ctx.internalPath.erase(0, 1);
-
-	ctx.sandboxPath = sandboxPath;
-	ctx.targetFilePath = sandboxPath / ctx.internalPath;
-	ctx.ext = ctx.targetFilePath.extension().string();
-	std::transform(ctx.ext.begin(), ctx.ext.end(), ctx.ext.begin(), ::tolower);
-
-	ctx.loadResource = "{" + ctx.GUID_PROJECT + "}" + ctx.internalPath;
-
-	fs::create_directories(ctx.targetFilePath.parent_path());
-
-	// =====================================================
-	// 🛠️ EXTENSION LOGIC
-	// =====================================================
-	if (g_ExtensionLogic.count(ctx.ext)) {
-		g_ExtensionLogic[ctx.ext](ctx);
-	} else {
-		const std::string& ext = ctx.ext;
-		if (ext == ".xob") { ctx.projectName = "XOBViewer"; ctx.wbModule = "resourceManager"; }
-		else if (ext == ".et" || ext == ".ent" || ext == ".layer") { ctx.projectName = "WorldEditor"; ctx.wbModule = "worldEditor"; }
-		else if (ext == ".c") { ctx.projectName = "ScriptEditor"; ctx.wbModule = "resourceManager"; }
-		else if (ext == ".acp" || ext == ".sig" || ext == ".afm" || ext == ".snd" || ext == ".wav") { ctx.projectName = "AudioEditor"; ctx.wbModule = "audioEditor"; }
-		else if (ext == ".agf" || ext == ".agr" || ext == ".anm" || ext == ".asi" || ext == ".ast" || ext == ".aw" || ext == ".ae" || ext == ".asy" || ext == ".txa") { ctx.projectName = "AnimationEditor"; ctx.wbModule = "animEditor"; }
-		else if (ext == ".bt") { ctx.projectName = "BehaviorEditor"; ctx.wbModule = "behaviorEditor"; }
-		else if (ext == ".ptc") { ctx.projectName = "ParticleEditor"; ctx.wbModule = "particleEditor"; }
-		else if (ext == ".layout" || ext == ".styles" || ext == ".imageset") { ctx.projectName = "LayoutEditor"; ctx.wbModule = "resourceManager"; }
-		else if (ext == ".emat" || ext == ".gamemat" || ext == ".physmat") { ctx.projectName = "MaterialEditor"; ctx.wbModule = "resourceManager"; }
-		else if (ext == ".edds" || ext == ".dds") { ctx.projectName = "TextureViewer"; ctx.wbModule = "resourceManager"; }
-		else if (ext == ".st") { ctx.projectName = "LocalizationEditor"; ctx.wbModule = "localizationEditor"; }
-		else if (ext == ".nmn") { ctx.projectName = "NavmeshGenerator"; ctx.wbModule = "navmeshGeneratorMain"; }
-		else if (ext == ".pap" || ext == ".siga") { ctx.projectName = "ProcAnimEditor"; ctx.wbModule = "procAnimEditor"; }
-		else if (ext == ".conf" || ext == ".gproj" || ext == ".meta" || ext == ".pre" || ext == ".fnt" || ext == ".ttf") { ctx.projectName = "ConfigViewer"; ctx.wbModule = "resourceManager"; }
-	}
-
-	// =====================================================
-	// 📂 FILE OPERATIONS
-	// =====================================================
-	try {
-		fs::path sourceInSandbox = sandboxPath / ctx.internalPath;
-		if (fs::exists(sourceInSandbox) && sourceInSandbox != ctx.targetFilePath) {
-			if (fs::exists(ctx.targetFilePath)) fs::remove(ctx.targetFilePath);
-			fs::copy_file(sourceInSandbox, ctx.targetFilePath);
-		}
-	} catch (...) { return false; }
-
-	// =====================================================
-	// 📝 PROJECT GENERATION (Meta & GPROJ)
-	// =====================================================
-	try {
-		std::ofstream meta(ctx.targetFilePath.string() + ".meta");
-		meta << "MetaFileClass {\n Name \"{" << ctx.GUID_PROJECT << "}" << ctx.internalPath << "\"\n}\n";
-		meta.close();
-
-		std::ofstream gproj(sandboxPath / "addon.gproj");
-		gproj << "GameProject {\n"
-			  << " ID \"" << ctx.projectName << "\"\n"
-			  << " GUID \"" << ctx.GUID_PROJECT << "\"\n"
-			  << " TITLE \"" << ctx.projectName << "\"\n"
-			  << " Dependencies {\n"
-			  << "  \"58D0FB3206B6F859\"\n"
-			  << " }\n"
-			  << "}";
-		gproj.close();
-	} catch (...) { return false; }
-
-	// =====================================================
-	// 🚀 COMMAND EXECUTION
-	// =====================================================
-	std::wstring wModule = std::wstring(ctx.wbModule.begin(), ctx.wbModule.end());
-	std::wstring wLoad = std::wstring(ctx.loadResource.begin(), ctx.loadResource.end());
-
-	std::wstring openCmd = L"\"" + wbExe + L"\"" +
-		L" -gproj \"" + (sandboxPath / "addon.gproj").wstring() + L"\"" +
-		L" -addonsDir \"" + sandboxPath.wstring() + L"," + gameData.wstring() + L"\"" +
-		L" -wbModule=" + wModule;
-
-	if (ctx.wbModule == "scriptEditor") {
-		openCmd += L" -noGameScriptsOnInit";
-	}
-
-	openCmd += L" -run -load \"" + wLoad + L"\"";
-
-	LogInfo("[Workbench] Final Launch Command: " + ws2s(openCmd));
-
-	if (!LaunchWorkbenchWithRetry(openCmd, binDir.wstring(), sandboxPath)) {
-		MessageBoxW(NULL,
-			L"Failed to launch Workbench after multiple attempts.\nPlease ensure Steam is running and logged in.",
-			L"Error",
-			MB_OK | MB_ICONERROR);
-		return false;
-	}
-
-	return true;
-}
-
 static PakArchive* GetArchive(HANDLE hArcData) {
 	return reinterpret_cast<PakArchive*>(hArcData);
 }
@@ -1410,84 +862,10 @@ std::unique_ptr<ThreadPool> g_ThreadPool = nullptr;
 static std::string g_LastOpenedArcName = "";
 static std::wstring g_LastTargetDir = L"";
 static bool g_ExtractOptionsShown = false;
-static bool g_SettingsChangedForRefresh = false;
 static std::atomic<bool> g_RequireReload{ false };
 static FILETIME g_OriginalArchiveTime = { 0 };
 static std::string g_OriginalArchivePath = "";
 static std::chrono::steady_clock::time_point g_LastOperationEndTime = std::chrono::steady_clock::now();
-
-// ============================================================================
-// AUTOREFRESH
-// ============================================================================
-static HWND FindTCWindow() {
-	HWND h = FindWindowA("TTOTAL_CMD", NULL);
-	if (!h) h = GetForegroundWindow();
-	return h;
-}
-
-static bool TouchArchiveFile(const std::string& filePath, FILETIME originalTime) {
-	if (filePath.empty()) return false;
-
-	if (originalTime.dwLowDateTime == 0 && originalTime.dwHighDateTime == 0) {
-		GetSystemTimeAsFileTime(&originalTime);
-	}
-
-	for (int attempt = 0; attempt < 5; ++attempt) {
-		HANDLE h = CreateFileA(
-			filePath.c_str(),
-			FILE_WRITE_ATTRIBUTES,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-			NULL,
-			OPEN_EXISTING,
-			0,
-			NULL
-		);
-
-		if (h != INVALID_HANDLE_VALUE) {
-			ULARGE_INTEGER uli;
-			uli.LowPart = originalTime.dwLowDateTime;
-			uli.HighPart = originalTime.dwHighDateTime;
-
-			if (uli.QuadPart > 100000000LL) {
-				uli.QuadPart -= 100000000LL;
-			} else {
-				uli.QuadPart = 0;
-			}
-
-			FILETIME ft;
-			ft.dwLowDateTime = uli.LowPart;
-			ft.dwHighDateTime = uli.HighPart;
-
-			bool success = (SetFileTime(h, NULL, NULL, &ft) != 0);
-			if (success) {
-				FlushFileBuffers(h);
-				CloseHandle(h);
-				LogInfo("[Touch] Archive timestamp shifted successfully: " + filePath);
-				return true;
-			}
-
-			DWORD err = GetLastError();
-			CloseHandle(h);
-			LogError("[Touch] SetFileTime failed (attempt " + std::to_string(attempt) + "): " + std::to_string(err));
-		}
-
-		Sleep(100);
-	}
-
-	try {
-		std::filesystem::path p(filePath);
-		if (std::filesystem::exists(p)) {
-			std::filesystem::last_write_time(p, std::filesystem::file_time_type::clock::now());
-			LogInfo("[Touch] Archive timestamp updated via filesystem fallback.");
-			return true;
-		}
-	}
-	catch (const std::exception& e) {
-		LogError(std::string("[Touch] Fallback failed: ") + e.what());
-	}
-
-	return false;
-}
 
 // ============================================================================
 // OPENARCHIVE
@@ -1503,6 +881,7 @@ static HANDLE OpenArchiveInternal(const std::string& arcName, T* ArchiveData) {
 			g_ExtractOptionsShown = false;
 		}
 
+		bool isSameFile = (arcName == g_LastOpenedArcName);
 		bool forceReload = g_RequireReload.load();
 
 		if (forceReload && !g_OriginalArchivePath.empty()) {
@@ -1533,10 +912,17 @@ static HANDLE OpenArchiveInternal(const std::string& arcName, T* ArchiveData) {
 			return nullptr;
 		}
 
-		// Konverziós snapshotok eltávolítva
+		ImageModule::Snapshot currentSnapshot = ImageModule::ResolveSnapshot(isSameFile, forceReload);
+
 		if (forceReload) {
 			g_RequireReload = false;
 		}
+
+		newArchive->SetImageSnapshot(currentSnapshot);
+
+		LogInfo("[OpenArchive] Snapshot applied. Conv: " +
+			std::to_string(currentSnapshot.enabled) +
+			" Format: " + std::to_string(static_cast<int>(currentSnapshot.format)));
 
 		g_LastOpenedArcName = arcName;
 
@@ -1549,6 +935,7 @@ static HANDLE OpenArchiveInternal(const std::string& arcName, T* ArchiveData) {
 		ArchiveData->OpenResult = 0;
 
 		LogInfo("Successfully opened archive: " + arcName + " (with virtual plugin entry)");
+
 		LogInfo("[OpenArchive] instance=" + std::to_string((uintptr_t)newArchive.get()));
 
 		return reinterpret_cast<HANDLE>(newArchive.release());
@@ -1617,7 +1004,8 @@ static HeaderResult PrepareHeaderData(HANDLE hArcData, PreparedHeader& out) {
 	if (!out.entry) return HeaderResult::BAD_DATA;
 
 	out.displayName = out.entry->name;
-	// EDDS kiterjesztés átírási logika eltávolítva
+
+	ImageModule::AdjustDisplayName(out.displayName, out.entry->isDirectory, arc->GetImageSnapshot(), arc, idx);
 
 	if (out.entry->timestamp != 0) {
 		FILETIME ft;
@@ -1640,7 +1028,7 @@ static HeaderResult PrepareHeaderData(HANDLE hArcData, PreparedHeader& out) {
 
 static int MapHeaderResult(HeaderResult res) {
 	switch (res) {
-		case HeaderResult::END:          return E_END_ARCHIVE;
+		case HeaderResult::END:         return E_END_ARCHIVE;
 		case HeaderResult::BAD_ARCHIVE: return E_BAD_ARCHIVE;
 		case HeaderResult::BAD_DATA:    return E_BAD_DATA;
 		default:                        return 0;
@@ -1719,24 +1107,60 @@ int __stdcall ProcessFile(HANDLE hArcData, int Operation, char* DestPath, char* 
 		DestName ? wideDestName : nullptr);
 }
 
-static PakEntry g_CurrentEntryForDialog;
-static PakArchive* g_CurrentArchiveForDialog = nullptr;
-
 static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 // ============================
-// Viewer check
+// Viewer / Temp check
 // ============================
 static bool IsViewerRequest(const std::wstring& name) {
-	return name.find(L"\\_tc\\") != std::wstring::npos ||
-		   name.find(L"/_tc/") != std::wstring::npos;
+	std::wstring lower = name;
+	std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+	return lower.find(L"\\_tc\\") != std::wstring::npos ||
+		   lower.find(L"/_tc/") != std::wstring::npos;
+}
+
+static bool IsSilentOperation(const wchar_t* destPath, const wchar_t* destName) {
+	std::wstring fullPath;
+	if (destPath) fullPath += destPath;
+	if (destName) {
+		if (!fullPath.empty() && fullPath.back() != L'\\' && fullPath.back() != L'/') fullPath += L"\\";
+		fullPath += destName;
+	}
+
+	if (fullPath.empty()) return false;
+
+	std::wstring lower = fullPath;
+	std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+	if (lower.find(L"\\_tc\\") != std::wstring::npos || lower.find(L"/_tc/") != std::wstring::npos) return true;
+	if (lower.find(L"\\temp\\") != std::wstring::npos || lower.find(L"/temp/") != std::wstring::npos) return true;
+	if (lower.find(L"\\appdata\\local\\temp") != std::wstring::npos) return true;
+
+	wchar_t systemTemp[MAX_PATH];
+	if (GetTempPathW(MAX_PATH, systemTemp)) {
+		std::wstring sTemp = systemTemp;
+		std::transform(sTemp.begin(), sTemp.end(), sTemp.begin(), ::tolower);
+
+		if (!sTemp.empty() && (sTemp.back() == L'\\' || sTemp.back() == L'/')) {
+			sTemp.pop_back();
+		}
+
+		if (!sTemp.empty() && lower.find(sTemp) != std::wstring::npos) {
+			return true;
+		}
+	}
+
+	std::lock_guard<std::mutex> lock(g_SearchTextMutex);
+	if (!SearchTextW.empty()) return true;
+
+	return false;
 }
 
 // ============================
 // Folder copy detection
 // ============================
-static bool DetectFolderCopy(const std::wstring& wDestName, const PakEntry* entry, bool isViewer) {
-	if (wDestName.empty() || isViewer) return false;
+static bool DetectFolderCopy(const std::wstring& wDestName, const PakEntry* entry, bool isSilent) {
+	if (wDestName.empty() || isSilent) return false;
 
 	fs::path pDest(wDestName);
 	fs::path pInternal(UTF8ToWString(entry->name));
@@ -1780,16 +1204,19 @@ static int HandleSettingsFile(PakArchive* currentArchive, const PakEntry* entry,
 	return E_EABORTED;
 }
 
-// ============================
-// WORKBENCH LAUNCH
-// ============================
+// ============================================================================
+// 🛠️ WORKBENCH LAUNCH
+// ============================================================================
 static int HandleWorkbenchLaunch(PakArchive* arc) {
 	LogInfo("[ProcessFileW] Workbench launch triggered.");
 
-	// Konverziós mentés eltávolítva
+	ImageModule::Snapshot originalSnapshot = arc->GetImageSnapshot();
+
+	ImageModule::Snapshot workbenchSnap = originalSnapshot;
+	workbenchSnap.enabled = false;
+	arc->SetImageSnapshot(workbenchSnap);
 
 	static std::atomic<uint64_t> counter{0};
-
 	auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 	DWORD pid = GetCurrentProcessId();
 	uint64_t localCounter = counter.fetch_add(1, std::memory_order_relaxed);
@@ -1799,9 +1226,14 @@ static int HandleWorkbenchLaunch(PakArchive* arc) {
 		std::to_string(now) + "_" +
 		std::to_string(localCounter);
 
-	fs::create_directories(tempBase);
-
-	LogInfo("[Workbench] Using temp: " + tempBase);
+	try {
+		fs::create_directories(tempBase);
+		LogInfo("[Workbench] Using temp: " + tempBase);
+	} catch (...) {
+		LogError("[Workbench] Failed to create temp directory: " + tempBase);
+		arc->SetImageSnapshot(originalSnapshot);
+		return -1;
+	}
 
 	std::unordered_set<std::string> processed;
 	std::string finalPath = (fs::path(tempBase) / g_CurrentEntryForDialog.name).string();
@@ -1813,18 +1245,18 @@ static int HandleWorkbenchLaunch(PakArchive* arc) {
 		processed
 	);
 
+	arc->SetImageSnapshot(originalSnapshot);
+
 	if (ok) {
-		OpenInWorkbench(g_CurrentEntryForDialog.name, tempBase);
+		WorkbenchModule::OpenInWorkbench(g_CurrentEntryForDialog.name, tempBase);
 
 		std::thread([tempBase]() {
 			LogInfo("[Cleanup] Waiting before deletion: " + tempBase);
-
 			std::this_thread::sleep_for(std::chrono::seconds(10));
 
 			int safetyCounter = 0;
-			while (IsWorkbenchRunning()) {
+			while (WorkbenchModule::IsWorkbenchRunning()) {
 				std::this_thread::sleep_for(std::chrono::seconds(2));
-
 				if (++safetyCounter > 300) {
 					LogInfo("[Cleanup] Safety timeout reached, forcing cleanup.");
 					break;
@@ -1842,6 +1274,8 @@ static int HandleWorkbenchLaunch(PakArchive* arc) {
 				LogError("[Cleanup] Failed to delete temp: " + tempBase);
 			}
 		}).detach();
+	} else {
+		LogError("[Workbench] Extraction failed for: " + g_CurrentEntryForDialog.name);
 	}
 
 	return 0;
@@ -1895,14 +1329,14 @@ static int HandleExtract(
 	int entryIndex,
 	const PakEntry* entry,
 	const std::wstring& wDestPath,
-	const std::wstring& wDestName
+	const std::wstring& wDestName,
+	bool isSilent
 ) {
 	if (entry && entry->name == "pak_plugin.ini") {
 		return 0;
 	}
 
-	bool isViewer = IsViewerRequest(wDestName);
-	bool isFolderCopy = DetectFolderCopy(wDestName, entry, isViewer);
+	bool isFolderCopy = DetectFolderCopy(wDestName, entry, isSilent);
 
 	fs::path fullTargetPath;
 	if (!wDestName.empty()) fullTargetPath = fs::path(wDestName);
@@ -1910,6 +1344,17 @@ static int HandleExtract(
 	else fullTargetPath = fs::current_path();
 
 	fullTargetPath = fullTargetPath.lexically_normal();
+
+	bool forceOriginalName = isSilent;
+
+	fullTargetPath = ImageModule::ResolveExtractPath(
+		fullTargetPath,
+		entry->name,
+		arc->GetImageSnapshot(),
+		forceOriginalName,
+		isFolderCopy
+	);
+
 	fs::path basePath = fullTargetPath;
 
 	if (isFolderCopy || (basePath.has_filename() && basePath.has_extension())) {
@@ -1935,12 +1380,10 @@ static int HandleExtract(
 	bool success = false;
 	std::string finalPath;
 
-	// Konverziós logika eltávolítva (EDDS->DDS stb.)
-
-	if (isViewer || isFolderCopy) {
-		fs::path p = fullTargetPath;
-		auto u8dir = p.u8string();
+	if (isSilent || isFolderCopy) {
+		auto u8dir = fullTargetPath.u8string();
 		std::string direct(reinterpret_cast<const char*>(u8dir.c_str()));
+
 		success = arc->ExtractFile(entryIndex, direct);
 		finalPath = direct;
 	}
@@ -1980,37 +1423,44 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 		int idx = arc->GetLastIndex();
 		const PakEntry* entry = arc->GetEntry(idx);
 
+		std::wstring currentDestPath = DestPath ? DestPath : L"";
+		std::wstring wDestName = DestName ? DestName : L"";
+
+		bool isSilent = IsSilentOperation(DestPath, DestName);
+
+		std::wstring fullPathCheck = currentDestPath;
+		if (!wDestName.empty()) {
+			if (!fullPathCheck.empty() && fullPathCheck.back() != L'\\' && fullPathCheck.back() != L'/') fullPathCheck += L"\\";
+			fullPathCheck += wDestName;
+		}
+		bool isViewer = IsViewerRequest(fullPathCheck);
+
 		if (entry && entry->name == "pak_plugin.ini") {
 			if (Operation == PK_EXTRACT) {
-				std::wstring wCheck = DestName ? DestName : L"";
-				bool isViewer = IsViewerRequest(wCheck);
+				bool isSearchActive = false;
+				{
+					std::lock_guard<std::mutex> lock(g_SearchTextMutex);
+					isSearchActive = !SearchTextW.empty();
+				}
 
-				if (isViewer) {
+				if (isViewer && !isSearchActive) {
 					return HandleSettingsFile(arc, entry, DestName);
 				}
 				else {
-					LogInfo("[ProcessFileW] Skipping extraction of virtual file: pak_plugin.ini");
+					LogInfo("[ProcessFileW] Skipping virtual file: pak_plugin.ini (not a viewer request)");
 					return 0;
 				}
 			}
 		}
 
 		if (Operation == PK_EXTRACT) {
-			std::wstring currentDestPath = DestPath ? DestPath : L"";
-			std::wstring wCheck = DestName ? DestName : L"";
-			bool isViewer = IsViewerRequest(wCheck);
-
-			if (!isViewer && currentDestPath != g_LastTargetDir) {
-				g_ExtractOptionsShown = false;
-				g_LastTargetDir = currentDestPath;
-			}
-
-			if (!g_ExtractOptionsShown) {
-				if (isViewer && entry && entry->name == "pak_plugin.ini") {
-					return HandleSettingsFile(arc, entry, DestName);
+			if (!isSilent) {
+				if (currentDestPath != g_LastTargetDir) {
+					g_ExtractOptionsShown = false;
+					g_LastTargetDir = currentDestPath;
 				}
 
-				if (!isViewer) {
+				if (!g_ExtractOptionsShown) {
 					if (g_ShowExtractPrompt) {
 						g_CurrentArchiveForDialog = arc;
 						if (entry) g_CurrentEntryForDialog = *entry;
@@ -2042,9 +1492,7 @@ int __stdcall ProcessFileW(HANDLE hArcData, int Operation, const wchar_t* DestPa
 		}
 
 		if (Operation == PK_EXTRACT) {
-			std::wstring wDestPath = DestPath ? DestPath : L"";
-			std::wstring wDestName = DestName ? DestName : L"";
-			return HandleExtract(arc, idx, entry, wDestPath, wDestName);
+			return HandleExtract(arc, idx, entry, currentDestPath, wDestName, isSilent);
 		}
 
 		return 0;
@@ -2120,18 +1568,6 @@ void __stdcall SetProcessDataProc(HANDLE hArcData, tProcessDataProc pProcessData
 	}
 }
 
-extern "C" __declspec(dllexport) void __stdcall SetSearchText(const char* SearchString) {
-	std::lock_guard<std::mutex> lock(g_SearchTextMutex);
-	if (SearchString) {
-		SearchTextW = UTF8ToWString(SearchString);
-		LogInfo("[SetSearchText] Search pattern set (A): " + WStringToUTF8(SearchTextW));
-	}
-	else {
-		SearchTextW.clear();
-		LogInfo("[SetSearchText] Search pattern cleared (A).");
-	}
-}
-
 extern "C" __declspec(dllexport) void __stdcall SetSearchTextW(const WCHAR* SearchString) {
 	std::lock_guard<std::mutex> lock(g_SearchTextMutex);
 	if (SearchString) {
@@ -2141,6 +1577,20 @@ extern "C" __declspec(dllexport) void __stdcall SetSearchTextW(const WCHAR* Sear
 	else {
 		SearchTextW.clear();
 		LogInfo("[SetSearchTextW] Search pattern cleared (W).");
+	}
+}
+
+extern "C" __declspec(dllexport) void __stdcall SetSearchText(const char* SearchString) {
+	if (SearchString) {
+		int len = MultiByteToWideChar(CP_ACP, 0, SearchString, -1, nullptr, 0);
+		if (len > 0) {
+			std::wstring wideTemp(len - 1, L'\0');
+			MultiByteToWideChar(CP_ACP, 0, SearchString, -1, &wideTemp[0], len);
+			SetSearchTextW(wideTemp.c_str());
+		}
+	}
+	else {
+		SetSearchTextW(nullptr);
 	}
 }
 
@@ -2163,6 +1613,8 @@ static INT_PTR CALLBACK AboutDialogProc(HWND hDlg, UINT message, WPARAM wParam, 
 
 			if (hBmp) {
 				SendMessage(hLogoCtrl, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBmp);
+			} else {
+				LogError("Failed to load/scale About dialog bitmap IDB_LOGO.");
 			}
 		}
 
@@ -2184,7 +1636,9 @@ static INT_PTR CALLBACK AboutDialogProc(HWND hDlg, UINT message, WPARAM wParam, 
 		HWND hLogoCtrl = GetDlgItem(hDlg, IDC_ABOUT_LOGO);
 		if (hLogoCtrl) {
 			HBITMAP hBmp = (HBITMAP)SendMessage(hLogoCtrl, STM_GETIMAGE, IMAGE_BITMAP, 0);
-			if (hBmp) DeleteObject(hBmp);
+			if (hBmp) {
+				DeleteObject(hBmp);
+			}
 		}
 		return TRUE;
 	}
@@ -2193,10 +1647,16 @@ static INT_PTR CALLBACK AboutDialogProc(HWND hDlg, UINT message, WPARAM wParam, 
 }
 
 // ============================================================================
-// 🔥 SETTINGS DIALOG PROC
+// ⚙️ SETTINGS DIALOG PROC
 // ============================================================================
 static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
 	static bool isSettingsOnlyMode = false;
+
+	auto RefreshImageUI = [hDlg]() {
+		if (g_CurrentArchiveForDialog) {
+			ImageModule::UpdateSettingsUI(hDlg, g_CurrentArchiveForDialog);
+		}
+	};
 
 	switch (message) {
 	case WM_INITDIALOG: {
@@ -2206,17 +1666,13 @@ static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wPara
 		if (hLogoCtrl) {
 			RECT rect = { 0 };
 			GetClientRect(hLogoCtrl, &rect);
-			int width = rect.right - rect.left;
-			int height = rect.bottom - rect.top;
-
-			HBITMAP hBmp = (HBITMAP)LoadImage(g_hModule,
-											MAKEINTRESOURCE(IDB_LOGO),
-											IMAGE_BITMAP,
-											width,
-											height,
-											LR_CREATEDIBSECTION);
-
-			if (hBmp) SendMessage(hLogoCtrl, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBmp);
+			HBITMAP hBmp = (HBITMAP)LoadImage(g_hModule, MAKEINTRESOURCE(IDB_LOGO), IMAGE_BITMAP,
+											rect.right - rect.left, rect.bottom - rect.top, LR_CREATEDIBSECTION);
+			if (hBmp) {
+				SendMessage(hLogoCtrl, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBmp);
+			} else {
+				LogError("Failed to load/scale settings dialog bitmap IDB_LOGO.");
+			}
 		}
 
 		CheckDlgButton(hDlg, IDC_ENABLE_SMART_EXTRACT, g_EnableSmartExtract ? BST_CHECKED : BST_UNCHECKED);
@@ -2230,22 +1686,31 @@ static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wPara
 			CheckDlgButton(hDlg, IDC_SHOW_EXTRACT_PROMPT, g_ShowExtractPrompt ? BST_CHECKED : BST_UNCHECKED);
 		}
 
+		ImageModule::InitSettingsUI(hDlg);
+
 		HWND hWorkbenchBtn = GetDlgItem(hDlg, IDC_OPEN_WORKBENCH);
 		if (hWorkbenchBtn) {
 			bool shouldShow = false;
 			if (!g_CurrentEntryForDialog.name.empty() && !g_CurrentEntryForDialog.isDirectory) {
 				std::string ext = fs::path(g_CurrentEntryForDialog.name).extension().string();
 				std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-				if (IsWorkbenchSupported(ext)) shouldShow = true;
+				if (WorkbenchModule::IsWorkbenchSupported(ext)) shouldShow = true;
 			}
 			ShowWindow(hWorkbenchBtn, shouldShow ? SW_SHOW : SW_HIDE);
 		}
 
+		RefreshImageUI();
 		return TRUE;
 	}
 
 	case WM_COMMAND: {
 		WORD controlId = LOWORD(wParam);
+		WORD notification = HIWORD(wParam);
+
+		if (ImageModule::HandleSettingsCommand(hDlg, controlId, notification)) {
+			RefreshImageUI();
+			return TRUE;
+		}
 
 		switch (controlId) {
 		case IDOK: {
@@ -2258,6 +1723,13 @@ static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wPara
 
 			if (GetDlgItem(hDlg, IDC_SHOW_EXTRACT_PROMPT)) {
 				g_ShowExtractPrompt = (IsDlgButtonChecked(hDlg, IDC_SHOW_EXTRACT_PROMPT) == BST_CHECKED);
+			}
+
+			if (ImageModule::ApplyAndRefreshIfNeeded(hDlg, g_CurrentArchiveForDialog, isSettingsOnlyMode)) {
+				g_RequireReload = true;
+				g_LastOpenedArcName = "";
+			} else {
+				LogInfo("[Settings] Refresh skipped (No image change or settings-only mode).");
 			}
 
 			SaveSettings();
@@ -2292,9 +1764,12 @@ static INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, WPARAM wPara
 	return FALSE;
 }
 
+// ============================================================================
+// EXPORTED FUNCTIONS
+// ============================================================================
 extern "C" __declspec(dllexport) int __stdcall ConfigurePacker(HWND Parent, HINSTANCE DllInstance) {
 	g_LastOpenedArcName = "";
-	DialogBoxParam(DllInstance, MAKEINTRESOURCE(IDD_ARMAPAK_SETTINGS), Parent, SettingsDialogProc, 0);
+	DialogBoxParam(DllInstance, MAKEINTRESOURCE(IDD_ARMAPAK_SETTINGS), Parent, SettingsDialogProc, 1);
 	return 0;
 }
 
@@ -2306,10 +1781,14 @@ extern "C" __declspec(dllexport) int __stdcall GetPackerCaps() {
 	return PK_CAPS_MULTIPLE | PK_CAPS_BY_CONTENT | PK_CAPS_OPTIONS | PK_CAPS_SEARCHTEXT | PK_CAPS_MEMPACK;
 }
 
-static BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+// ============================================================================
+// DLL MAIN
+// ============================================================================
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
 		g_hModule = hModule;
+
 		{
 			std::error_code ec;
 			if (!fs::exists(GetIniPath(), ec)) {
@@ -2333,17 +1812,28 @@ static BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID l
 				time_t now = time(nullptr);
 				char timeStr[26];
 				ctime_s(timeStr, sizeof(timeStr), &now);
-				if (timeStr[strlen(timeStr) - 1] == '\n') timeStr[strlen(timeStr) - 1] = '\0';
-
+				if (timeStr[strlen(timeStr) - 1] == '\n') {
+					timeStr[strlen(timeStr) - 1] = '\0';
+				}
 				debugLog << "\n\n=== DLL ATTACH: New session === " << timeStr << "\n";
 				debugLog << "Plugin version: " << PLUGIN_VERSION_STRING << "\n";
-				debugLog << "[INIT] Settings loaded.\n";
+
+				debugLog << "[INIT] Settings loaded:\n";
+				debugLog << " - Smart Extract: " << (g_EnableSmartExtract ? "Enabled" : "Disabled") << "\n";
+				debugLog << " - Keep Directory Structure: " << (g_KeepDirectoryStructure ? "Enabled" : "Disabled") << "\n";
+				debugLog << " - Verbose Logging: " << (g_EnableLogInfo ? "Enabled" : "Disabled") << "\n";
+
 				debugLog.flush();
+			} else {
+				logInitialized = false;
 			}
 		}
 		break;
 	case DLL_PROCESS_DETACH:
-		if (g_ThreadPool) g_ThreadPool.reset();
+		if (g_ThreadPool) {
+			g_ThreadPool.reset();
+		}
+
 		if (logInitialized && debugLog.is_open()) {
 			debugLog << "[INFO] === DLL DETACH: Session end ===\n";
 			debugLog.close();
@@ -2641,4 +2131,27 @@ bool SmartExtractor::LooksLikePath(const std::string& s) {
 	return std::all_of(s.begin(), s.end(), [](char c) {
 		return std::isprint((unsigned char)c);
 		});
+}
+
+// ============================================================================
+// EXTERNAL HELPERS
+// ============================================================================
+
+void SetArchiveSnapshotExternal(void* arc_ptr, ImageModule::Snapshot snap) {
+	if (arc_ptr) reinterpret_cast<PakArchive*>(arc_ptr)->SetImageSnapshot(snap);
+}
+
+ImageModule::Snapshot GetArchiveSnapshotExternal(void* arc_ptr) {
+	if (arc_ptr) return reinterpret_cast<PakArchive*>(arc_ptr)->GetImageSnapshot();
+	return ImageModule::Snapshot();
+}
+
+std::string GetArchiveFilenameExternal(void* arc_ptr) {
+	if (arc_ptr) return reinterpret_cast<PakArchive*>(arc_ptr)->GetFilename();
+	return "";
+}
+
+int FindIndexByNameExternal(void* arc_ptr, const std::string& name) {
+	if (arc_ptr) return reinterpret_cast<PakArchive*>(arc_ptr)->FindIndexByName(name);
+	return -1;
 }
