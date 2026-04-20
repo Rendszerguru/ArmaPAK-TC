@@ -18,6 +18,9 @@
     <ClCompile Include="ArmaPAK.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="WorkbenchModule.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="wcxhead.h">
@@ -26,10 +29,13 @@
     <ClInclude Include="pak_index.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ThreadPool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="SmartExtractor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ThreadPool.h">
+    <ClInclude Include="WorkbenchModule.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
