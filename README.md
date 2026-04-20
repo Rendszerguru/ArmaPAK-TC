@@ -1,6 +1,6 @@
 # 📦 Arma PAK Plugin for Total Commander
 
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/Rendszerguru/ArmaPAK-TC/releases/latest)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/Rendszerguru/ArmaPAK-TC/releases/latest)
 [![TC IrfanView](https://img.shields.io/badge/TC%20IrfanView-Plugin-orange.svg)](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html)
 [![Plugman](https://img.shields.io/badge/Plugman-Compatible-success.svg)](https://totalcmd.net/plugring/tc_plugman.html)
 [![License](https://img.shields.io/badge/license-Free-lightgrey.svg)](#-license)
@@ -13,13 +13,13 @@ This plugin allows Total Commander to handle Arma Reforger `.PAK` archives as if
 
 ### ✨ **Key Features**
 
-- **Workbench Integration:** 🛠 Open `.xob` models or other assets directly in the **Arma Reforger Workbench** with a single click from the extraction dialog. The plugin handles dependencies and workbench launching automatically.
+- **Workbench Integration:** 🛠 Open `.xob` models or other assets directly in the **Arma Reforger Workbench** with a single click from the extraction dialog (**F5**). The plugin handles dependencies and workbench launching automatically.
 - **Interactive Configuration:** ⚙️ Every archive contains a virtual `pak_plugin.ini` file. Simply press **F3 (Lister)** on it to instantly open the plugin's graphical settings panel without leaving the archive.
 - **Quick Extraction Options (F5 / Alt+F9):** ⚡ A compact dialog appears before copying or unpacking, allowing you to modify **extraction settings** on-the-fly.
 - **Smart Extract (Dependency Handling):** 🧠 When extracting models (`.xob`) or materials (`.emat`), the plugin automatically finds and extracts all required assets (like `.edds` textures) from the **currently active or opened archives**.
 - **Intelligent Folders:** 📂 Optionally preserves original folder hierarchy and prevents redundant folder levels (e.g., `scripts/scripts/`) while ensuring seamless file viewing (**F3**) without extra directories.
 - **High-Performance Engine:** 🚀 Custom **Multi-threaded ThreadPool** for parallel extraction and an **$O(1)$ PakIndex lookup system** (hash-map) for instant file access.
-- **Full-text Search Support:** Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search directly within archive contents.
+- **Full-text Search Support:** Use Total Commander’s **Find Files** (`Alt + F7`) with **Find text** enabled to search directly within archive contents. **Supports multi-line search** using the `\n` sequence.
 - **Viewer Integration:** View game assets directly in the viewer (**F3**) using [IrfanView](https://www.irfanview.com) and the [TC IrfanView Plugin](https://totalcmd.net/plugring/TCIrfanViewPlugin_2.0.html).
 
 <img width="512" height="302" alt="armapak" src="https://github.com/user-attachments/assets/670de00a-c25b-468d-8a60-bf9d84747242" />
@@ -53,7 +53,7 @@ Unzip the **ArmaPAK-TC.zip** and press **Enter** on the `.wcx` file inside Total
 - **Browse:** Press **Enter** or **Ctrl+PageDown** on a `.pak` file.
 - **Extract (F5 / Alt+F9):** Use **F5** (Copy) or **Alt+F9** (Unpack). Use the **"Open in Workbench"** button for rapid asset editing.
 - **Quick Settings:** Locate the `pak_plugin.ini` inside any PAK and press **F3** to adjust plugin behavior instantly.
-- **Search:** Press **Alt + F7**, enable **Find text**, and search within archives.
+- **Search:** Press **Alt + F7**, enable **Find text**, and search within archives. (Tip: Use `\n` for multi-line search).
 
 ---
 
