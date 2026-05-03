@@ -227,9 +227,9 @@ static const std::unordered_set<std::string> supportedExtensions = {
  //        ".et", ".ent", ".layer", ".c", ".acp", ".sig", ".afm", ".snd", ".wav",
  //        ".agf", ".agr", ".anm", ".asi", ".ast", ".aw", ".ae", ".asy", ".txa",
  //        ".bt", ".ptc", ".layout", ".styles", ".imageset", ".emat", ".gamemat",
- //        ".physmat", ".edds", ".st", ".nmn", ".pap", ".siga", ".conf",
+ //        ".physmat", ".st", ".nmn", ".pap", ".siga", ".conf",
  //        ".gproj", ".meta", ".pre", ".fnt", ".ttf"
-		  ".xob", ".c"
+		  ".xob", ".c", ".edds"
 	};
 
 	return supportedExtensions.count(extension) > 0;
@@ -524,7 +524,9 @@ bool OpenInWorkbench(const std::string& pakEntryPath, const std::string& extract
 		else if (ext == ".ptc") { ctx.projectName = "ParticleEditor"; ctx.wbModule = "particleEditor"; }
 		else if (ext == ".layout" || ext == ".styles" || ext == ".imageset") { ctx.projectName = "LayoutEditor"; ctx.wbModule = "resourceManager"; }
 		else if (ext == ".emat" || ext == ".gamemat" || ext == ".physmat") { ctx.projectName = "MaterialEditor"; ctx.wbModule = "resourceManager"; }
-		else if (ext == ".edds") { ctx.projectName = "TextureViewer"; ctx.wbModule = "resourceManager"; }
+
+		else if (ext == ".edds") { ctx.projectName = "ResourceManager"; ctx.wbModule = "resourceManager"; }
+
 		else if (ext == ".st") { ctx.projectName = "LocalizationEditor"; ctx.wbModule = "localizationEditor"; }
 		else if (ext == ".nmn") { ctx.projectName = "NavmeshGenerator"; ctx.wbModule = "navmeshGeneratorMain"; }
 		else if (ext == ".pap" || ext == ".siga") { ctx.projectName = "ProcAnimEditor"; ctx.wbModule = "procAnimEditor"; }
